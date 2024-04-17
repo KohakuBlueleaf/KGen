@@ -2,7 +2,7 @@ from setuptools import setup, find_packages
 
 
 setup(
-    name="kgen",
+    name="tipo-kgen",
     packages=find_packages(),
     version="0.0.1",
     license="Apache 2.0",
