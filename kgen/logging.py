@@ -22,7 +22,7 @@ class ColoredFormatter(logging.Formatter):
 
 
 # Create a new logger
-logger = logging.getLogger("DanTagGen")
+logger = logging.getLogger("TOPI-KGen")
 logger.propagate = False
 
 # Add handler if we don't have one.
