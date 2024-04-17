@@ -30,7 +30,7 @@ def seperate_tags(all_tags):
             if len(tag) < 4:
                 tag_map["general"].append(tag)
             else:
-                tag_map["special"].append(tag.replace("_", " "))
+                tag_map["general"].append(tag.replace("_", " "))
     return tag_map
 
 
