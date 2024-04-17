@@ -6,7 +6,7 @@ setup(
     packages=find_packages(),
     version="0.0.1",
     license="Apache 2.0",
-    url="",
+    url="https://github.com/KohakuBlueleaf/KGen",
     description=(
         "TIPO: Text to Image genration through "
         "text Presampling with LLMs for Optimal prompting"
