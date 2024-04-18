@@ -126,11 +126,15 @@ def tag_gen(
         llm_gen = llm_gen.replace("</s>", "").replace("<s>", "")
         orig_prompt = llm_gen.split("<|input_end|>")[0]
         extra = llm_gen.split("<|input_end|>")[-1].strip().strip(",")
-        extra_tokens = sorted(set([
-            tok.strip()
-            for tok in extra.split(",")
-            if not black_list_match(tok.strip(), black_list)
-        ]))
+        extra_tokens = sorted(
+            set(
+                [
+                    tok.strip()
+                    for tok in extra.split(",")
+                    if not black_list_match(tok.strip(), black_list)
+                ]
+            )
+        )
         llm_gen = llm_gen.replace(extra, ", ".join(extra_tokens))
 
         yield llm_gen, extra_tokens, iter_count
