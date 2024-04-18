@@ -2,7 +2,7 @@
 
 ***\*WIP\****
 
-KGen is a project that utilizes Large Language Models (LLMs) to generate prompts for Text-to-Image (T2I) models. 
+KGen is a project that utilizes Large Language Models (LLMs) to generate prompts for Text-to-Image (T2I) models.
 
 The goal is to enable T2I models to use more complicated and detailed captions during training while maintaining good usability.
 
@@ -40,12 +40,12 @@ DanTagGen uses the LLaMA architecture with 400M parameters.
 
 ### Training
 
-DanTagGen is trained on posts with the top 75% favorite count in Danbooru, which amounts to 5 million entries. 
+DanTagGen is trained on posts with the top 75% favorite count in Danbooru, which amounts to 5 million entries.
 
 More details about the architecture and training can be found on the Hugging Face page: [KBlueLeaf/DanTagGen-beta · Hugging Face](https://huggingface.co/KBlueLeaf/DanTagGen-beta)
 
 ### Usage
 
-* Hugging Face Space:
+* Hugging Face Space: [DTG Demo - a Hugging Face Space by KBlueLeaf](https://huggingface.co/spaces/KBlueLeaf/DTG-demo)
 * SD-WebUI Extension: [KohakuBlueleaf/z-a1111-sd-webui-dtg: A sd-webui extension for utilizing DanTagGen to &#34;upsample prompts&#34;. (github.com)](https://github.com/KohakuBlueleaf/z-a1111-sd-webui-dtg)
-* ComfyUI Node:
+* ComfyUI Node: [toyxyz/a1111-sd-webui-dtg_comfyui: A sd-webui extension for utilizing DanTagGen to &#34;upsample prompts&#34;. (github.com)](https://github.com/toyxyz/a1111-sd-webui-dtg_comfyui)
