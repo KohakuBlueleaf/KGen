@@ -9,14 +9,14 @@ from .logging import logger
 
 model_dir = pathlib.Path(__file__).parent / "models"
 model_list = [
-    "KBlueLeaf/DanTagGen-alpha",
     "KBlueLeaf/DanTagGen-beta",
+    "KBlueLeaf/DanTagGen-alpha",
     "KBlueLeaf/DanTagGen-gamma",
 ]
 gguf_name = [
-    "ggml-model-f16.gguf",
-    "ggml-model-Q8_0.gguf",
     "ggml-model-Q6_K.gguf",
+    "ggml-model-Q8_0.gguf",
+    "ggml-model-f16.gguf",
 ]
 
 
@@ -58,7 +58,7 @@ def list_gguf():
     return files
 
 
-def load_model(model_name="KBlueLeaf/DanTagGen-gamma", gguf=False):
+def load_model(model_name=model_list[0], gguf=False):
     global text_model, tokenizer
     if gguf:
         try:
@@ -75,7 +75,7 @@ def load_model(model_name="KBlueLeaf/DanTagGen-gamma", gguf=False):
             return
         except Exception as e:
             logger.warning(f"Llama-cpp-python/gguf model {model_name} load failed")
-            model_name = model_list[-1]
+            model_name = model_list[0]
     logger.info(f"Using transformers model {model_name}")
     text_model = LlamaForCausalLM.from_pretrained(model_name).eval().half()
     tokenizer = LlamaTokenizer.from_pretrained(model_name)
