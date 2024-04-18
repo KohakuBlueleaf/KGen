@@ -9,22 +9,11 @@ from kgen.logging import logger
 
 
 SEED_MAX = 2**31 - 1
-QUOTESWAP = str.maketrans("'\"", "\"'")
 TOTAL_TAG_LENGTH = {
     "VERY_SHORT": "very short",
     "SHORT": "short",
     "LONG": "long",
     "VERY_LONG": "very long",
-}
-TOTAL_TAG_LENGTH_TAGS = {
-    TOTAL_TAG_LENGTH["VERY_SHORT"]: "<|very_short|>",
-    TOTAL_TAG_LENGTH["SHORT"]: "<|short|>",
-    TOTAL_TAG_LENGTH["LONG"]: "<|long|>",
-    TOTAL_TAG_LENGTH["VERY_LONG"]: "<|very_long|>",
-}
-PROCESSING_TIMING = {
-    "BEFORE": "Before applying other prompt processings",
-    "AFTER": "After applying other prompt processings",
 }
 DEFAULT_FORMAT = """<|special|>, 
 <|characters|>, <|copyrights|>, 
@@ -33,22 +22,6 @@ DEFAULT_FORMAT = """<|special|>,
 <|general|>, 
 
 <|quality|>, <|meta|>, <|rating|>"""
-TIMING_INFO_TEMPLATE = (
-    "_Prompt upsampling will be applied to {} "
-    "sd-dynamic-promps and the webui's styles feature are applied_"
-)
-INFOTEXT_KEY = "DTG Parameters"
-INFOTEXT_KEY_PROMPT = "DTG prompt"
-INFOTEXT_KEY_FORMAT = "DTG format"
-
-PROMPT_INDICATE_HTML = """
-<div style="height: 100%; width: 100%; display: flex; justify-content: center; align-items: center">
-    <span>
-        Original Prompt Loaded.<br>
-        Click "Apply" to apply the original prompt.
-    </span>
-</div>
-"""
 
 
 def process(
