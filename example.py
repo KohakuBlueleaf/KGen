@@ -37,7 +37,7 @@ def process(
     logger.info(f"Processing propmt: {propmt_preview}...")
     logger.info(f"Processing with seed: {seed}")
     black_list = [tag.strip() for tag in ban_tags.split(",") if tag.strip()]
-    all_tags = [tag.strip() for tag in prompt.strip().split(",") if tag.strip()]
+    all_tags = [tag.strip().lower() for tag in prompt.strip().split(",") if tag.strip()]
 
     tag_length = tag_length.replace(" ", "_")
     len_target = TARGET[tag_length]
@@ -74,14 +74,16 @@ if __name__ == "__main__":
     # or whatever path you want to put your model file
     models.model_dir = pathlib.Path(__file__).parent / "models"
 
-    file = models.download_gguf()
+    # file = models.download_gguf(gguf_name="ggml-model-Q6_K.gguf")
     files = models.list_gguf()
     file = files[-1]
     logger.info(f"Use gguf model from local file: {file}")
-    models.load_model(file, gguf=True)
+    models.load_model(file, gguf=True, device="cpu")
+    # models.load_model()
+    # models.text_model.half().cuda()
 
     prompt = """
-1girl, ask (askzy), masterpiece
+1girl, Umamusume, ask (askzy), horse girl, masterpiece, absurdres, sensitive
 """
 
     t0 = time.time_ns()
