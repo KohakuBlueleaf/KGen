@@ -54,6 +54,6 @@ RATING_TAGS = ["safe", "general", "sfw", "sensitive", "nsfw", "explicit"]
 TARGET = {
     "very_short": 8,
     "short": 16,
-    "long": 30,
-    "very_long": 45,
+    "long": 32,
+    "very_long": 48,
 }
