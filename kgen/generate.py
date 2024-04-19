@@ -1,5 +1,4 @@
 import regex as re
-import random
 from contextlib import nullcontext
 from random import shuffle
 
@@ -12,13 +11,14 @@ except ImportError:
     class Llama:
         pass
 
-
 from transformers import (
     GenerationConfig,
     PreTrainedModel,
     PreTrainedTokenizerBase,
     set_seed,
 )
+
+from .utils import same_order_deduplicate
 
 
 def generate(
@@ -44,7 +44,6 @@ def generate(
             repeat_penalty=repetition_penalty or 1,
             seed=kwargs.get("seed", None),
         )
-        # print(prompt, "===", result["choices"][0]["text"])
         return prompt + result["choices"][0]["text"]
     if "seed" in kwargs:
         set_seed(kwargs["seed"])
@@ -126,15 +125,12 @@ def tag_gen(
         llm_gen = llm_gen.replace("</s>", "").replace("<s>", "")
         orig_prompt = llm_gen.split("<|input_end|>")[0]
         extra = llm_gen.split("<|input_end|>")[-1].strip().strip(",")
-        extra_tokens = sorted(
-            set(
-                [
-                    tok.strip()
-                    for tok in extra.split(",")
-                    if not black_list_match(tok.strip(), black_list)
-                ]
-            )
-        )
+        extra_tokens = [
+            tok.strip()
+            for tok in extra.split(",")
+            if not black_list_match(tok.strip(), black_list)
+        ]
+        extra_tokens = same_order_deduplicate(extra_tokens)
         llm_gen = llm_gen.replace(extra, ", ".join(extra_tokens))
 
         yield llm_gen, extra_tokens, iter_count
