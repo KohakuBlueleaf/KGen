@@ -58,7 +58,7 @@ def list_gguf():
     return files
 
 
-def load_model(model_name=model_list[0], gguf=False):
+def load_model(model_name=model_list[0], gguf=False, device="cpu"):
     global text_model, tokenizer
     if gguf:
         try:
@@ -67,11 +67,19 @@ def load_model(model_name=model_list[0], gguf=False):
             text_model = Llama(
                 str(model_dir / model_name),
                 n_ctx=384,
-                n_gpu_layers=100,
+                n_gpu_layers=0 if device == "cpu" else 1000,
                 verbose=False,
             )
             tokenizer = None
             logger.info(f"Llama-cpp-python/gguf model {model_name} loaded")
+            if device=="cuda":
+                logger.warning(
+                    "llama.cpp have reproducibility issue on cuda "
+                    "(https://github.com/ggerganov/llama.cpp/pull/1346) "
+                    "It is suggested to use cpu or "
+                    "compile llama-cpp-python by yourself "
+                    "and set GGML_CUDA_MAX_STREAMS in the file ggml-cuda.cu to 1."
+                )
             return
         except Exception as e:
             logger.warning(f"Llama-cpp-python/gguf model {model_name} load failed")
