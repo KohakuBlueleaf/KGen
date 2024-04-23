@@ -7,8 +7,14 @@ from transformers import LlamaForCausalLM, LlamaTokenizer
 from .logging import logger
 
 
+text_model = None
+tokenizer = None
+current_model_name = None
+
+
 model_dir = pathlib.Path(__file__).parent / "models"
 model_list = [
+    "KBlueLeaf/DanTagGen-delta",
     "KBlueLeaf/DanTagGen-beta",
     "KBlueLeaf/DanTagGen-alpha",
     "KBlueLeaf/DanTagGen-gamma",
@@ -18,6 +24,12 @@ gguf_name = [
     "ggml-model-Q8_0.gguf",
     "ggml-model-f16.gguf",
 ]
+model_have_quality_info = {
+    "DanTagGen-delta": True,
+    "DanTagGen-beta": False,
+    "DanTagGen-alpha": False,
+    "DanTagGen-gamma": False,
+}
 
 
 try:
@@ -59,11 +71,13 @@ def list_gguf():
 
 
 def load_model(model_name=model_list[0], gguf=False, device="cpu"):
-    global text_model, tokenizer
+    global text_model, tokenizer, current_model_name
     if gguf:
+        model_name = os.path.basename(model_name)
+        model_repo_name = model_name.split("_")[0]
+        current_model_name = model_repo_name
         try:
             assert Llama is not None
-            model_name = os.path.basename(model_name)
             text_model = Llama(
                 str(model_dir / model_name),
                 n_ctx=384,
@@ -83,10 +97,11 @@ def load_model(model_name=model_list[0], gguf=False, device="cpu"):
             return
         except Exception as e:
             logger.warning(f"Llama-cpp-python/gguf model {model_name} load failed")
-            model_name = model_list[0]
+            model_name = model_repo_name
     logger.info(f"Using transformers model {model_name}")
     text_model = LlamaForCausalLM.from_pretrained(model_name).eval().half()
     tokenizer = LlamaTokenizer.from_pretrained(model_name)
+    current_model_name = model_name.split("/")[-1]
     logger.info(f"Model {model_name} loaded")
 
 

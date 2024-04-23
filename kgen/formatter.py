@@ -1,6 +1,7 @@
 import os
 import pathlib
 
+from . import models
 from .metainfo import SPECIAL, POSSIBLE_QUALITY_TAGS, RATING_TAGS
 
 
@@ -61,6 +62,10 @@ aspect ratio: {f"{aspect_ratio:.1f}" or '<|empty|>'}
 target: {'<|' + target + '|>' if target else '<|long|>'}
 general: {special_tags}, {general.strip().strip(",")}<|input_end|>
 """.strip()
+
+    if models.model_have_quality_info[models.current_model_name]:
+        quality = ", ".join(tag_map.get("quality", ["masterpiece"]))
+        prompt = f"quality: {quality}\n{prompt}"
 
     return prompt
 
