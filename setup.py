@@ -4,7 +4,7 @@ from setuptools import setup, find_packages
 setup(
     name="tipo-kgen",
     packages=find_packages(),
-    version="0.0.7",
+    version="0.0.9",
     license="Apache 2.0",
     url="https://github.com/KohakuBlueleaf/KGen",
     description=(
