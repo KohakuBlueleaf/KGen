@@ -86,7 +86,7 @@ def load_model(model_name=model_list[0], gguf=False, device="cpu"):
             )
             tokenizer = None
             logger.info(f"Llama-cpp-python/gguf model {model_name} loaded")
-            if device=="cuda":
+            if device == "cuda":
                 logger.warning(
                     "llama.cpp have reproducibility issue on cuda "
                     "(https://github.com/ggerganov/llama.cpp/pull/1346) "

@@ -11,6 +11,7 @@ except ImportError:
     class Llama:
         pass
 
+
 from transformers import (
     GenerationConfig,
     PreTrainedModel,
