@@ -14,6 +14,7 @@ current_model_name = None
 
 model_dir = pathlib.Path(__file__).parent / "models"
 model_list = [
+    "KBlueLeaf/DanTagGen-delta-rev2",
     "KBlueLeaf/DanTagGen-delta",
     "KBlueLeaf/DanTagGen-beta",
     "KBlueLeaf/DanTagGen-alpha",
@@ -25,6 +26,7 @@ gguf_name = [
     "ggml-model-f16.gguf",
 ]
 model_have_quality_info = {
+    "DanTagGen-delta-rev2": True,
     "DanTagGen-delta": True,
     "DanTagGen-beta": False,
     "DanTagGen-alpha": False,
@@ -43,7 +45,7 @@ if not os.path.isdir(model_dir):
     os.makedirs(model_dir, exist_ok=True)
 
 
-def download_gguf(model_name="KBlueLeaf/DanTagGen-gamma", gguf_name=gguf_name[-1]):
+def download_gguf(model_name=model_list[0], gguf_name=gguf_name[-1]):
     logger.info(f"Downloading gguf model from {model_name}")
     result = hf_hub_download(
         model_name,
