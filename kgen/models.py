@@ -99,7 +99,7 @@ def load_model(model_name=model_list[0], gguf=False, device="cpu"):
             return
         except Exception as e:
             logger.warning(f"Llama-cpp-python/gguf model {model_name} load failed")
-            model_name = model_repo_name
+            model_name = f"KBlueLeaf/{model_repo_name}"
     logger.info(f"Using transformers model {model_name}")
     text_model = LlamaForCausalLM.from_pretrained(model_name).eval().half()
     tokenizer = LlamaTokenizer.from_pretrained(model_name)
