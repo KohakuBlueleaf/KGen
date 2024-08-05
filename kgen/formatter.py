@@ -1,4 +1,5 @@
 import os
+import re
 import pathlib
 
 from . import models
@@ -17,6 +18,7 @@ tag_lists["rating"] = set(RATING_TAGS)
 
 
 def seperate_tags(all_tags):
+    all_tags = [i.strip() for i in all_tags if i.strip()]
     tag_map = {cate: [] for cate in tag_lists.keys()}
     tag_map["general"] = []
     for tag in all_tags:
@@ -43,6 +45,10 @@ def apply_format(tag_map, form):
                 form = form.replace(f"<|{type}|>", "")
             else:
                 form = form.replace(f"<|{type}|>", ", ".join(tag_map[type]))
+    while "\n " in form:
+        form = form.replace("\n ", "\n")
+    while "\n\n\n" in form:
+        form = form.replace("\n\n\n", "\n\n")
     return form.strip().strip(",")
 
 
@@ -63,11 +69,44 @@ target: {'<|' + target + '|>' if target else '<|long|>'}
 general: {special_tags}, {general.strip().strip(",")}<|input_end|>
 """.strip()
 
-    if models.model_have_quality_info[models.current_model_name]:
+    if models.model_have_quality_info.get(models.current_model_name, None):
         quality = ", ".join(tag_map.get("quality", ["masterpiece"]))
         prompt = f"quality: {quality}\n{prompt}"
 
     return prompt
+
+
+parse = re.compile(r"\n([^:\n]+):(.*(?:\n(?![^:\n]+:).*)*)")
+TYPE_MAP = {
+    "short": "extended",
+    "long": "generated",
+}
+
+
+def parse_titpop_result(result: str):
+    result = "\n" + result.strip("<s>").strip("</s>").strip()
+    result_dict = {}
+    for type, content in parse.findall(result):
+        type = type.strip()
+        content = content.strip()
+        if type == "tag":
+            tags = [i.strip() for i in content.split(",") if i.strip()]
+            content = seperate_tags(tags)
+            for key, value in content.items():
+                value = [i for i in value if i]
+                if key in result_dict:
+                    result_dict[key].extend(value)
+                elif not value:
+                    result_dict[key] = []
+                else:
+                    result_dict[key] = value
+        else:
+            if not isinstance(content, list):
+                content = [content.strip()]
+            if content[0] == "<|empty|>" or not content[0]:
+                continue
+            result_dict[TYPE_MAP.get(type, type)] = content
+    return result_dict
 
 
 if __name__ == "__main__":

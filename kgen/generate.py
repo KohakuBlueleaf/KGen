@@ -19,12 +19,13 @@ from transformers import (
     set_seed,
 )
 
+from . import models
 from .utils import same_order_deduplicate
 
 
 def generate(
-    model: PreTrainedModel | Llama,
-    tokenizer: PreTrainedTokenizerBase,
+    model: PreTrainedModel | Llama = None,
+    tokenizer: PreTrainedTokenizerBase = None,
     prompt="",
     temperature=0.5,
     top_p=0.95,
@@ -34,6 +35,10 @@ def generate(
     autocast_gen=lambda: torch.autocast("cpu", enabled=False),
     **kwargs,
 ):
+    if model is None:
+        model = models.text_model
+    if tokenizer is None:
+        tokenizer = models.tokenizer
     if isinstance(model, Llama):
         # print(kwargs)
         result = model.create_completion(
@@ -64,11 +69,9 @@ def generate(
         generation_output = model.generate(
             input_ids=input_ids,
             generation_config=generation_config,
-            return_dict_in_generate=True,
-            output_scores=True,
             max_new_tokens=max_new_tokens,
         )
-    s = generation_output.sequences[0]
+    s = generation_output[0]
     output = tokenizer.decode(s)
 
     torch.cuda.empty_cache()

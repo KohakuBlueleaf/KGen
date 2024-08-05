@@ -1,10 +1,12 @@
 import os
 import pathlib
 
+import torch
 from huggingface_hub import hf_hub_download
 from transformers import LlamaForCausalLM, LlamaTokenizer
 
 from .logging import logger
+from .patch import patch
 
 
 text_model = None
@@ -82,7 +84,7 @@ def load_model(model_name=model_list[0], gguf=False, device="cpu"):
             assert Llama is not None
             text_model = Llama(
                 str(model_dir / model_name),
-                n_ctx=384,
+                n_ctx=1024,
                 n_gpu_layers=0 if device == "cpu" else 1000,
                 verbose=False,
             )
@@ -101,7 +103,9 @@ def load_model(model_name=model_list[0], gguf=False, device="cpu"):
             logger.warning(f"Llama-cpp-python/gguf model {model_name} load failed")
             model_name = f"KBlueLeaf/{model_repo_name}"
     logger.info(f"Using transformers model {model_name}")
-    text_model = LlamaForCausalLM.from_pretrained(model_name).eval().half()
+    text_model = patch(
+        LlamaForCausalLM.from_pretrained(model_name).eval().half().to(device)
+    )
     tokenizer = LlamaTokenizer.from_pretrained(model_name)
     current_model_name = model_name.split("/")[-1]
     logger.info(f"Model {model_name} loaded")

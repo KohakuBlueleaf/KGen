@@ -57,3 +57,9 @@ TARGET = {
     "long": 32,
     "very_long": 48,
 }
+TARGET_TITPOP = {
+    "very_short": 10,
+    "short": 20,
+    "long": 40,
+    "very_long": 60,
+}
