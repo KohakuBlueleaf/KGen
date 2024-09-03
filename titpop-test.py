@@ -2,6 +2,7 @@ import re
 import random
 from time import time
 
+import torch
 from objprint import objprint
 from transformers import AutoTokenizer, logging
 
@@ -18,7 +19,7 @@ from kgen.utils import shuffle_iterable, same_order_deduplicate
 
 
 logging.set_verbosity_error()
-
+print(f'threads: {torch.get_num_threads()} {torch.get_num_interop_threads()}')
 
 DEFAULT_FORMAT = """<|special|>, <|characters|>, <|copyrights|>, 
 <|artist|>, 
@@ -33,13 +34,12 @@ DEFAULT_FORMAT = """<|special|>, <|characters|>, <|copyrights|>,
 clip_tokenizer = AutoTokenizer.from_pretrained("openai/clip-vit-base-patch32")
 t5_tokenizer = AutoTokenizer.from_pretrained("EleutherAI/pile-t5-large")
 
-models.load_model("../TITPOP-200M-5ep-ft", device="cpu")
+models.load_model("../HakuPhi/TITPOP-200M-5ep-ft", device="cpu")
 generate(
     max_new_tokens=16,
 )
 
-BAN_TAGS = [
-]
+BAN_TAGS = []
 
 
 def tag_filter(tag):
@@ -75,7 +75,7 @@ def post_generate_process(parsed, meta, general, nl_prompt, mode, length, expand
             output_nl_prompts[-1]
         ]
     if len(input_prompts) + len(output_nl_prompts) > 5:
-        output_nl_prompts = output_nl_prompts[:max(5 - len(input_prompts), 0)]
+        output_nl_prompts = output_nl_prompts[: max(5 - len(input_prompts), 0)]
 
     new_general = input_generals + output_generals
     new_nl_prompt = input_prompts + output_nl_prompts
@@ -264,12 +264,8 @@ def _titpop_runner(meta, operations, general, nl_prompt, gen_meta=False):
     return parsed, total_timing
 
 
-tags = (
-    "masterpiece, absurdres, newest, safe, no human, scenery"
-)
-nl_prompt = (
-    "An oil paint of"
-)
+tags = "masterpiece, absurdres, newest, safe, no human, scenery"
+nl_prompt = "An oil paint of"
 
 
 t0 = time()
@@ -306,9 +302,9 @@ timing["total"] = t1 - t0
 generate_pass = timing["generate_pass"]
 total_generated_tokens = timing["generated_tokens"]
 total_input_tokens = timing["input_tokens"]
-sampling_time = timing["total_sampling"]/1000
-process_time = timing["prompt_process"]/1000
-model_time = timing["total_eval"]/1000
+sampling_time = timing["total_sampling"] / 1000
+process_time = timing["prompt_process"] / 1000
+model_time = timing["total_eval"] / 1000
 
 print(
     f"""Process Time:

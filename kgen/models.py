@@ -104,7 +104,14 @@ def load_model(model_name=model_list[0], gguf=False, device="cpu"):
             model_name = f"KBlueLeaf/{model_repo_name}"
     logger.info(f"Using transformers model {model_name}")
     text_model = patch(
-        LlamaForCausalLM.from_pretrained(model_name).eval().half().to(device)
+        LlamaForCausalLM.from_pretrained(
+            model_name,
+            torch_dtype=torch.float32 if device == "cpu" else torch.float16,
+            attn_implementation="flash_attention_2" if device == "cuda" else "sdpa",
+        )
+        .requires_grad_(False)
+        .eval()
+        .to(device)
     )
     tokenizer = LlamaTokenizer.from_pretrained(model_name)
     current_model_name = model_name.split("/")[-1]
