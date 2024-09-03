@@ -33,9 +33,6 @@ DEFAULT_FORMAT = """<|special|>, <|characters|>, <|copyrights|>,
 clip_tokenizer = AutoTokenizer.from_pretrained("openai/clip-vit-base-patch32")
 t5_tokenizer = AutoTokenizer.from_pretrained("EleutherAI/pile-t5-large")
 
-total_generated_tokens = 0
-total_input_tokens = 0
-
 models.load_model("../TITPOP-200M-5ep-ft", device="cpu")
 generate(
     max_new_tokens=16,
@@ -110,6 +107,7 @@ def generate_with_retry(
     max_retry=10,
     max_same_output=5,
     retry_criteria=retry_criteria,
+    total_timing=None,
 ):
     iter_count = 0
     prev_output = set()
@@ -118,6 +116,7 @@ def generate_with_retry(
         prompt = apply_titpop_prompt(
             meta, general, nl_prompt, mode, length, expand, gen_meta
         )
+        input_token_count = len(models.tokenizer(prompt)["input_ids"])
         result = generate(
             prompt=prompt,
             temperature=0.25,
@@ -126,6 +125,15 @@ def generate_with_retry(
             max_new_tokens=512,
             seed=seed + iter_count,
         )
+        output_token_count = len(models.tokenizer(result)["input_ids"])
+        token_generated = output_token_count - input_token_count
+        timing = models.text_model.export_time()
+        if total_timing is not None:
+            timing["generated_tokens"] = token_generated
+            timing["input_tokens"] = input_token_count
+            timing["generate_pass"] = 1
+            for key in timing:
+                total_timing[key] = total_timing.get(key, 0) + timing[key]
         parsed = parse_titpop_result(result)
         parsed = post_generate_process(
             parsed, meta, general, nl_prompt, mode, length, expand
@@ -153,7 +161,7 @@ def generate_with_retry(
 
 
 def titpop_runner(meta, operations, general, nl_prompt, gen_meta=False):
-    global total_generated_tokens, total_input_tokens
+    total_timing = {}
     for idx, (mode, length, expand) in enumerate(operations):
         is_last = idx == len(operations) - 1
         prompt = apply_titpop_prompt(
@@ -171,6 +179,7 @@ def titpop_runner(meta, operations, general, nl_prompt, gen_meta=False):
             expand,
             gen_meta and is_last,
             seed=random.randint(0, 2**32),
+            total_timing=total_timing,
         )
         if not is_last:
             if "generated" in parsed and nl_prompt:
@@ -185,12 +194,12 @@ def titpop_runner(meta, operations, general, nl_prompt, gen_meta=False):
             )
             nl_prompt = nl_prompt.strip()
 
-    return parsed
+    return parsed, total_timing
 
 
 def _titpop_runner(meta, operations, general, nl_prompt, gen_meta=False):
-    global total_generated_tokens, total_input_tokens
     print("=" * 87)
+    total_timing = {}
     for idx, (mode, length, expand) in enumerate(operations):
         is_last = idx == len(operations) - 1
         prompt = apply_titpop_prompt(
@@ -213,11 +222,10 @@ def _titpop_runner(meta, operations, general, nl_prompt, gen_meta=False):
             gen_meta and is_last,
             seed=random.randint(0, 2**32),
             retry_criteria=lambda x: True,
+            total_timing=total_timing,
         )
         output_token_count = len(models.tokenizer(result)["input_ids"])
         token_generated = output_token_count - input_token_count
-        total_generated_tokens += token_generated
-        total_input_tokens += input_token_count
         print(result)
         print("=" * 87)
         timing = models.text_model.export_time()
@@ -253,7 +261,7 @@ def _titpop_runner(meta, operations, general, nl_prompt, gen_meta=False):
             print("new nl", nl_prompt)
 
     print(len(parsed["general"]))
-    return parsed
+    return parsed, total_timing
 
 
 tags = (
@@ -275,10 +283,11 @@ width = 1344
 height = 768
 meta["aspect_ratio"] = f"{width / height:.1f}"
 objprint(meta, operations, general, nl_prompt)
-result = titpop_runner(meta, operations, general, nl_prompt)
+result, timing = titpop_runner(meta, operations, general, nl_prompt)
 formatted = re.sub(r"([()\[\]<>])", r"\\\1", apply_format(result, DEFAULT_FORMAT))
 t1 = time()
 
+print(timing)
 print("=" * 87)
 print("=" * 40, "INPUT", "=" * 40)
 print()
@@ -293,13 +302,24 @@ print()
 print("=" * 87)
 print()
 
+timing["total"] = t1 - t0
+generate_pass = timing["generate_pass"]
+total_generated_tokens = timing["generated_tokens"]
+total_input_tokens = timing["input_tokens"]
+sampling_time = timing["total_sampling"]/1000
+process_time = timing["prompt_process"]/1000
+model_time = timing["total_eval"]/1000
+
 print(
-    f"""Total Process Time:
-    {t1-t0:.2f} sec
+    f"""Process Time:
+    Total    || {t1-t0:5.2f} sec / {generate_pass:5} Passes | {(t1-t0)/generate_pass:7.2f} Passes Per Second
+    Process  || {process_time:5.2f} sec / {total_input_tokens:5} Tokens | {total_input_tokens/process_time:7.2f} Tokens Per Second
+    Sampling || {sampling_time:5.2f} sec / {total_generated_tokens:5} Tokens | {total_generated_tokens/sampling_time:7.2f} Tokens Per Second
+    Eval     || {model_time:5.2f} sec / {total_generated_tokens:5} Tokens | {total_generated_tokens/model_time:7.2f} Tokens Per Second
 """
 )
 print(
-    f"""Total Processed Tokens:
+    f"""Processed Tokens:
     {total_input_tokens:} Input Tokens
     {total_generated_tokens:} Output Tokens
 """

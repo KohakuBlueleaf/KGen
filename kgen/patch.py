@@ -24,7 +24,7 @@ def export_time(self: PreTrainedModel):
 
     total_eval = 0
     total_sampling = 0
-    prev_t1 = self.t_forward[0][0]
+    prev_t1 = self.t_forward[0][1]
     for t0, t1 in self.t_forward[1:]:
         total_eval += t1 - t0
         total_sampling += t0 - prev_t1
@@ -36,8 +36,6 @@ def export_time(self: PreTrainedModel):
         "prompt_process": prompt_process / 1e6,
         "total_eval": total_eval / 1e6,
         "total_sampling": total_sampling / 1e6,
-        "avg_eval": total_eval / len(self.t_forward[1:]) / 1e6,
-        "avg_sampling": total_sampling / len(self.t_forward[1:]) / 1e6,
     }
 
     return timings
