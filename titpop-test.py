@@ -1,7 +1,6 @@
 import re
 import random
 from time import time
-from contextlib import nullcontext
 
 from objprint import objprint
 from transformers import AutoTokenizer, logging
@@ -43,8 +42,6 @@ generate(
 )
 
 BAN_TAGS = [
-    "school swimsuit",
-    "blush",
 ]
 
 
@@ -73,6 +70,9 @@ def post_generate_process(parsed, meta, general, nl_prompt, mode, length, expand
         for tag in parsed.get("extended", "").split(".")
         if tag_filter(tag.strip()) and tag.strip() not in input_prompts and tag.strip()
     ]
+    if output_nl_prompts and input_prompts[-1] in output_nl_prompts[0]:
+        input_prompts[-1] = output_nl_prompts[0]
+        output_nl_prompts.pop(0)
     if output_nl_prompts:
         output_nl_prompts = shuffle_iterable(output_nl_prompts[:-1]) + [
             output_nl_prompts[-1]
@@ -84,7 +84,7 @@ def post_generate_process(parsed, meta, general, nl_prompt, mode, length, expand
     new_nl_prompt = input_prompts + output_nl_prompts
 
     parsed["general"] = same_order_deduplicate(new_general)
-    parsed["extended"] = ". ".join(same_order_deduplicate(new_nl_prompt)) + "."
+    parsed["extended"] = ". ".join(same_order_deduplicate(new_nl_prompt))
 
     return parsed
 
@@ -250,19 +250,17 @@ def _titpop_runner(meta, operations, general, nl_prompt, gen_meta=False):
                 + parsed.get("general", [])
             )
             nl_prompt = nl_prompt.strip()
+            print("new nl", nl_prompt)
 
     print(len(parsed["general"]))
     return parsed
 
 
 tags = (
-    "1girl, masterpiece, absurdres, newest, safe, aqua hair, "
-    "loli, purple eyes, dragon wings, closed mouth, medium breasts, "
-    "dragon girl, dragon tail, pointy ears, long hair, "
-    "scenery, sideboob, close-up, from side"
+    "masterpiece, absurdres, newest, safe, no human, scenery"
 )
 nl_prompt = (
-    "A cute dragon girl is sitting on a bench in a cafe with cozy lighting"
+    "An oil paint of"
 )
 
 
