@@ -45,6 +45,9 @@ redundant_form: list[tuple[re.Pattern, str]] = [
 
 
 def apply_format(tag_map, form):
+    print(tag_map.keys())
+    if "<|extended|>" in form and "extended" not in tag_map:
+        form = form.replace("<|extended|>", "<|generated|>")
     for type in tag_map:
         if f"<|{type}|>" in form:
             if not tag_map[type]:
@@ -56,6 +59,7 @@ def apply_format(tag_map, form):
                     form = form.replace(f"<|{type}|>", ", ".join(data))
                 else:
                     form = form.replace(f"<|{type}|>", data)
+    form = re.sub(r"<\|.*\|>", "", form)
     for pattern, repl in redundant_form:
         form = pattern.sub(repl, form)
     return form.strip().strip(",")
@@ -113,7 +117,7 @@ def apply_titpop_prompt(meta, general, nl_prompt, mode, length, expand, gen_meta
     prompt += f"target: {target}\n"
 
     for idx, key in enumerate(content_order):
-        if key in content:
+        if key in content and content[key].strip():
             prompt += f"{key}: {content[key]}\n"
         elif idx < len(content_order) - 1:
             prompt += f"{key}: \n"
@@ -244,8 +248,6 @@ def parse_titpop_request(
                 op_for_nl_gen = ["tag_to_short_to_long", tag_length, False]
     if generate_extra_nl_prompt:
         operations.append(op_for_nl_gen)
-    else:
-        operations.append(["short_to_tag_to_long", None, None])
     return meta, operations, general, nl_prompt
 
 
