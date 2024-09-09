@@ -63,7 +63,7 @@ def generate(
         top_k=top_k,
         repetition_penalty=repetition_penalty,
         do_sample=True,
-        min_new_tokens=1,
+        min_new_tokens=2,
         **kwargs,
     )
     with torch.no_grad(), autocast_gen():

@@ -45,8 +45,7 @@ redundant_form: list[tuple[re.Pattern, str]] = [
 
 
 def apply_format(tag_map, form):
-    print(tag_map.keys())
-    if "<|extended|>" in form and "extended" not in tag_map:
+    if "<|extended|>" in form and not tag_map.get("extended", ""):
         form = form.replace("<|extended|>", "<|generated|>")
     for type in tag_map:
         if f"<|{type}|>" in form:
@@ -175,13 +174,10 @@ def parse_titpop_request(
     artist = ", ".join(tag_map.get("artist", []))
     characters = ", ".join(tag_map.get("characters", []))
     copyrights = ", ".join(tag_map.get("copyrights", []))
-    general = ", ".join(
-        tag_map.get("special", [])
-        + tag_map.get("meta", [])
-        + tag_map.get("general", [])
-    )
+    general = ", ".join(tag_map.get("special", []) + tag_map.get("general", []))
     general = general.strip().strip(",")
     meta = {
+        "meta": ", ".join(tag_map.get("meta", [])),
         "rating": rating or None,
         "artist": artist.strip() or None,
         "characters": characters.strip() or None,
@@ -249,72 +245,3 @@ def parse_titpop_request(
     if generate_extra_nl_prompt:
         operations.append(op_for_nl_gen)
     return meta, operations, general, nl_prompt
-
-
-if __name__ == "__main__":
-    from json import dumps
-
-    print(tag_lists.keys())
-    print([len(t) for t in tag_lists.values()])
-    print(
-        dumps(
-            tag_map := seperate_tags(
-                [
-                    "1girl",
-                    "fukuro daizi",
-                    "kz oji",
-                    "henreader",
-                    "ask (askzy)",
-                    "aki99",
-                    "masterpiece",
-                    "newest",
-                    "absurdres",
-                    "loli",
-                    "solo",
-                    "dragon girl",
-                    "dragon horns",
-                    "white dress",
-                    "long hair",
-                    "side up",
-                    "river",
-                    "tree",
-                    "forest",
-                    "pointy ears",
-                    ":3",
-                    "blue hair",
-                    "blush",
-                    "breasts",
-                    "collarbone",
-                    "dress",
-                    "eyes visible through hair",
-                    "fang",
-                    "looking at viewer",
-                    "nature",
-                    "off shoulder",
-                    "open mouth",
-                    "orange eyes",
-                    "tail",
-                    "twintails",
-                    "wings",
-                ]
-            ),
-            ensure_ascii=False,
-            indent=2,
-        )
-    )
-    print()
-    print(
-        apply_format(
-            tag_map,
-            """<|special|>, 
-<|characters|>, <|copyrights|>, 
-<|artist|>, 
-
-<|general|>, 
-
-<|quality|>, <|meta|>, <|rating|>""",
-        )
-    )
-    print()
-    print()
-    print(apply_dtg_prompt(tag_map, 1.0))

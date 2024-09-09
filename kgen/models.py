@@ -74,7 +74,7 @@ def list_gguf():
     return files
 
 
-def load_model(model_name=model_list[0], gguf=False, device="cpu"):
+def load_model(model_name=model_list[0], gguf=False, device="cpu", subfolder=None):
     global text_model, tokenizer, current_model_name
     if gguf:
         model_name = os.path.basename(model_name)
@@ -108,12 +108,13 @@ def load_model(model_name=model_list[0], gguf=False, device="cpu"):
             model_name,
             torch_dtype=torch.float32 if device == "cpu" else torch.float16,
             attn_implementation="flash_attention_2" if device == "cuda" else "sdpa",
+            subfolder=subfolder,
         )
         .requires_grad_(False)
         .eval()
         .to(device)
     )
-    tokenizer = LlamaTokenizer.from_pretrained(model_name)
+    tokenizer = LlamaTokenizer.from_pretrained(model_name, subfolder=subfolder)
     current_model_name = model_name.split("/")[-1]
     logger.info(f"Model {model_name} loaded")
 

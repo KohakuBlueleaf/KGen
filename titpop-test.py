@@ -21,22 +21,24 @@ from kgen.utils import shuffle_iterable, same_order_deduplicate
 DEFAULT_FORMAT = """<|special|>, <|characters|>, <|copyrights|>, 
 <|artist|>, 
 
-<|extended|>
-
 <|general|>,
+
+<|extended|>.
 
 <|quality|>, <|meta|>, <|rating|>
 """
-BAN_TAGS = []
+BAN_TAGS = ["background", "name", "text", "joke"]
 
 
 logging.set_verbosity_error()
-print(f'threads: {torch.get_num_threads()} {torch.get_num_interop_threads()}')
+print(f"threads: {torch.get_num_threads()} {torch.get_num_interop_threads()}")
 
 clip_tokenizer = AutoTokenizer.from_pretrained("openai/clip-vit-base-patch32")
 t5_tokenizer = AutoTokenizer.from_pretrained("EleutherAI/pile-t5-large")
 
-models.load_model("../HakuPhi/TITPOP-200M-5ep-ft", device="cuda")
+models.load_model(
+    "KBlueLeaf/TITPOP-200M-dev", device="cuda", subfolder="dan-cc-coyo_4000-step"
+)
 generate(
     max_new_tokens=16,
 )
@@ -49,7 +51,7 @@ def tag_filter(tag):
 
 
 def post_generate_process(parsed, meta, general, nl_prompt, mode, length, expand):
-    if "generated" in parsed and nl_prompt:
+    if "generated" in parsed and nl_prompt and not parsed.get("extended", "").strip():
         parsed["extended"] = parsed.pop("generated")
     input_tags = [tag.strip() for tag in general.split(",")]
     input_prompts = [tag.strip() for tag in nl_prompt.split(".") if tag.strip()]
@@ -86,12 +88,18 @@ def post_generate_process(parsed, meta, general, nl_prompt, mode, length, expand
     return parsed
 
 
-def retry_criteria(parsed):
-    return (
-        len(parsed.get("general", [])) >= 38
-        and len(parsed.get("general", [])) <= 48
-        and len(parsed.get("extended", "").split(".")) <= 5
-        and len(parsed.get("generated", "").split(".")) <= 5
+def retry_criteria(parsed, check_slice=slice(0, -1)):
+    checks = [
+        len(parsed.get("special", []) + parsed.get("general", [])),
+        len(parsed.get("extended", "").split(".")),
+        len(parsed.get("generated", "").split(".")),
+    ]
+    low_thresholds = [36, 4, 4]
+    high_thresholds = [54, 8, 8]
+    print(checks)
+    return all(
+        l <= i <= h
+        for l, i, h in list(zip(low_thresholds, checks, high_thresholds))[check_slice]
     )
 
 
@@ -114,14 +122,16 @@ def generate_with_retry(
     prev_output = set()
     same_output_count = 0
     while iter_count <= max_retry and same_output_count < max_same_output:
+        target = mode.split("_to_")[-1]
         prompt = apply_titpop_prompt(
             meta, general, nl_prompt, mode, length, expand, gen_meta
         )
         result = generate(
             prompt=prompt,
-            temperature=0.25,
-            top_p=0.95,
-            top_k=60,
+            temperature=0.5,
+            min_p=0.1,
+            # top_p=0.95,
+            # top_k=60,
             max_new_tokens=512,
             seed=seed + iter_count,
         )
@@ -141,8 +151,15 @@ def generate_with_retry(
         parsed = post_generate_process(
             parsed, meta, general, nl_prompt, mode, length, expand
         )
+        if target == "long" and "generated" not in parsed:
+            target = "short"
 
-        if retry_criteria(parsed):
+        slices_map = {
+            "tag": slice(0, 1),
+            "short": slice(1, 2),
+            "long": slice(2, 3),
+        }
+        if retry_criteria(parsed, slices_map.get(target, slice(0, -1))):
             break
         iter_count += 1
         if result in prev_output:
@@ -154,11 +171,7 @@ def generate_with_retry(
         nl_prompt = (
             parsed.get("generated", []) or parsed.get("extended", []) or nl_prompt
         )
-        general = ", ".join(
-            parsed.get("special", [])
-            + parsed.get("meta", [])
-            + parsed.get("general", [])
-        )
+        general = ", ".join(parsed.get("special", []) + parsed.get("general", []))
         nl_prompt = nl_prompt.strip()
     return result, parsed
 
@@ -203,26 +216,35 @@ def titpop_runner(meta, operations, general, nl_prompt, gen_meta=False):
 tags = nl_prompt = ""
 tags = """
 1girl,
-verxina (umamusume), umamusume,
-ogipote, misu kasumi, fuzichoco, ciloranko, migolu, ask (askzy), maccha (mochancc),
+kawakami princess (umamusume), umamusume,
+fuzichoco,
 
-masterpiece, newest, absurdres, sensitive, nsfw
+solo, shirt, large breasts, from side, closed mouth, floating hair,
+
+masterpiece, newest, absurdres, sensitive
 """
-nl_prompt = ""
-
+# nl_prompt = ""
+# tags = """
+# masterpiece, scenery, absurdres, safe, newest, no humans, cyberpunk
+# """
+nl_prompt = """
+An illustration of a girl standing on the cliff
+"""
 
 
 def task(tags, nl_prompt):
+    width = 1344
+    height = 768
     meta, operations, general, nl_prompt = parse_titpop_request(
         seperate_tags(tags.split(",")),
         nl_prompt,
         tag_length_target="long",
         generate_extra_nl_prompt="<|generated|>" in DEFAULT_FORMAT or not nl_prompt,
     )
-    width = 1344
-    height = 768
     meta["aspect_ratio"] = f"{width / height:.1f}"
+    # addon_meta = meta.pop("meta", "")
     result, timing = titpop_runner(meta, operations, general, nl_prompt)
+    # result["meta"] = addon_meta
     formatted = re.sub(r"([()\[\]])", r"\\\1", apply_format(result, DEFAULT_FORMAT))
     return formatted, timing
 
@@ -244,18 +266,20 @@ if __name__ == "__main__":
     print("=" * 87)
     print("=" * 40, "INPUT", "=" * 40)
     print()
-    print(tags)
-    print()
-    print(nl_prompt)
-    print()
+    if tags.strip().strip("\n"):
+        print(tags.strip().strip("\n"))
+        print()
+    if nl_prompt.strip().strip("\n"):
+        print(nl_prompt.strip().strip("\n"))
+        print()
     print("=" * 40, "OUTPUT", "=" * 39)
     print()
-    print(formatted)
+    print(formatted.strip())
     print()
     print("=" * 87)
     print()
 
-    timing["total"] = (t1 - t0)
+    timing["total"] = t1 - t0
     total = timing["total"]
     generate_pass = timing["generate_pass"]
     total_generated_tokens = timing["generated_tokens"]
@@ -268,7 +292,7 @@ if __name__ == "__main__":
         f"""Process Time:
         Total    || {total:5.2f} sec / {generate_pass:5} Passes | {generate_pass/total:7.2f} Passes Per Second
     """
-    f"""    Process  || {process_time:5.2f} sec / {total_input_tokens:5} Tokens | {total_input_tokens/process_time:7.2f} Tokens Per Second
+        f"""    Process  || {process_time:5.2f} sec / {total_input_tokens:5} Tokens | {total_input_tokens/process_time:7.2f} Tokens Per Second
         Sampling || {sampling_time:5.2f} sec / {total_generated_tokens:5} Tokens | {total_generated_tokens/sampling_time:7.2f} Tokens Per Second
         Eval     || {model_time:5.2f} sec / {total_generated_tokens:5} Tokens | {total_generated_tokens/model_time:7.2f} Tokens Per Second
     """
