@@ -4,7 +4,9 @@ from time import time
 
 import torch
 from objprint import objprint
+from torch.profiler import profile, ProfilerActivity
 from transformers import AutoTokenizer, logging
+from viztracer import VizTracer
 
 import kgen.models as models
 from kgen.generate import generate
@@ -29,6 +31,7 @@ DEFAULT_FORMAT = """<|special|>, <|characters|>, <|copyrights|>,
 """
 BAN_TAGS = ["background", "name", "text", "joke"]
 
+tracer = VizTracer()
 
 logging.set_verbosity_error()
 print(f"threads: {torch.get_num_threads()} {torch.get_num_interop_threads()}")
@@ -37,11 +40,19 @@ clip_tokenizer = AutoTokenizer.from_pretrained("openai/clip-vit-base-patch32")
 t5_tokenizer = AutoTokenizer.from_pretrained("EleutherAI/pile-t5-large")
 
 models.load_model(
-    "KBlueLeaf/TITPOP-200M-dev", device="cuda", subfolder="dan-cc-coyo_4000-step"
+    "KBlueLeaf/TITPOP-200M-dev", device="cuda", subfolder="dan-cc-coyo_8000-step"
 )
-generate(
-    max_new_tokens=16,
-)
+generate(max_new_tokens=4)
+# tracer.start()
+# generate(max_new_tokens=16)
+# tracer.stop()
+# tracer.save() 
+# with profile(activities=[ProfilerActivity.CPU, ProfilerActivity.CUDA], record_shapes=True) as prof:
+#     generate(
+#         max_new_tokens=16,
+#     )
+# prof.export_chrome_trace("titpop-test.json")
+# exit()
 
 
 def tag_filter(tag):
@@ -95,7 +106,7 @@ def retry_criteria(parsed, check_slice=slice(0, -1)):
         len(parsed.get("generated", "").split(".")),
     ]
     low_thresholds = [36, 4, 4]
-    high_thresholds = [54, 8, 8]
+    high_thresholds = [1000, 1000, 1000]
     print(checks)
     return all(
         l <= i <= h
@@ -216,10 +227,9 @@ def titpop_runner(meta, operations, general, nl_prompt, gen_meta=False):
 tags = nl_prompt = ""
 tags = """
 1girl,
-kawakami princess (umamusume), umamusume,
-fuzichoco,
+daiichi ruby (umamusume), umamusume,
 
-solo, shirt, large breasts, from side, closed mouth, floating hair,
+solo, expressionless, fashion, shirt, shorts, thigh, loli,
 
 masterpiece, newest, absurdres, sensitive
 """
@@ -228,7 +238,7 @@ masterpiece, newest, absurdres, sensitive
 # masterpiece, scenery, absurdres, safe, newest, no humans, cyberpunk
 # """
 nl_prompt = """
-An illustration of a girl standing on the cliff
+An illustration of a girl
 """
 
 
@@ -241,7 +251,7 @@ def task(tags, nl_prompt):
         tag_length_target="long",
         generate_extra_nl_prompt="<|generated|>" in DEFAULT_FORMAT or not nl_prompt,
     )
-    meta["aspect_ratio"] = f"{width / height:.1f}"
+    # meta["aspect_ratio"] = f"{width / height:.1f}"
     # addon_meta = meta.pop("meta", "")
     result, timing = titpop_runner(meta, operations, general, nl_prompt)
     # result["meta"] = addon_meta
