@@ -39,14 +39,19 @@ print(f"threads: {torch.get_num_threads()} {torch.get_num_interop_threads()}")
 clip_tokenizer = AutoTokenizer.from_pretrained("openai/clip-vit-base-patch32")
 t5_tokenizer = AutoTokenizer.from_pretrained("EleutherAI/pile-t5-large")
 
+# models.load_model(
+#     "KBlueLeaf/TITPOP-200M-dev", device="cuda", subfolder="dan-cc-coyo_8000-step"
+# )
 models.load_model(
-    "KBlueLeaf/TITPOP-200M-dev", device="cuda", subfolder="dan-cc-coyo_8000-step"
+    "TITPOP-200M-dev-F16.gguf",
+    gguf=True,
+    device="cuda",
 )
 generate(max_new_tokens=4)
 # tracer.start()
 # generate(max_new_tokens=16)
 # tracer.stop()
-# tracer.save() 
+# tracer.save()
 # with profile(activities=[ProfilerActivity.CPU, ProfilerActivity.CUDA], record_shapes=True) as prof:
 #     generate(
 #         max_new_tokens=16,
@@ -137,23 +142,20 @@ def generate_with_retry(
         prompt = apply_titpop_prompt(
             meta, general, nl_prompt, mode, length, expand, gen_meta
         )
-        result = generate(
+        result, input_token_count, token_generated = generate(
             prompt=prompt,
             temperature=0.5,
             min_p=0.1,
-            # top_p=0.95,
-            # top_k=60,
+            top_p=0.95,
+            top_k=60,
             max_new_tokens=512,
             seed=seed + iter_count,
         )
-        input_token_count = len(models.tokenizer(prompt)["input_ids"])
-        output_token_count = len(models.tokenizer(result)["input_ids"])
-        token_generated = output_token_count - input_token_count
         timing = {}
+        timing["generate_pass"] = 1
         timing["generated_tokens"] = token_generated
         timing["input_tokens"] = input_token_count
-        timing["generate_pass"] = 1
-        if get_timing_detail:
+        if get_timing_detail and hasattr(models.text_model, "export_time"):
             timing.update(models.text_model.export_time())
         if total_timing is not None:
             for key in timing:
@@ -288,38 +290,42 @@ if __name__ == "__main__":
     print()
     print("=" * 87)
     print()
-
     timing["total"] = t1 - t0
     total = timing["total"]
     generate_pass = timing["generate_pass"]
-    total_generated_tokens = timing["generated_tokens"]
-    total_input_tokens = timing["input_tokens"]
-    sampling_time = timing["total_sampling"] / 1000
-    process_time = timing["prompt_process"] / 1000
-    model_time = timing["total_eval"] / 1000
 
     print(
         f"""Process Time:
-        Total    || {total:5.2f} sec / {generate_pass:5} Passes | {generate_pass/total:7.2f} Passes Per Second
-    """
-        f"""    Process  || {process_time:5.2f} sec / {total_input_tokens:5} Tokens | {total_input_tokens/process_time:7.2f} Tokens Per Second
-        Sampling || {sampling_time:5.2f} sec / {total_generated_tokens:5} Tokens | {total_generated_tokens/sampling_time:7.2f} Tokens Per Second
-        Eval     || {model_time:5.2f} sec / {total_generated_tokens:5} Tokens | {total_generated_tokens/model_time:7.2f} Tokens Per Second
+    Total    || {total:5.2f} sec / {generate_pass:5} Passes | {generate_pass/total:7.2f} Passes Per Second
     """
     )
-    print(
-        f"""Processed Tokens:
-        {total_input_tokens:} Input Tokens
-        {total_generated_tokens:} Output Tokens
-    """
-    )
+    if "generated_tokens" in timing:
+        total_generated_tokens = timing["generated_tokens"]
+        total_input_tokens = timing["input_tokens"]
+        print(
+            f"""Processed Tokens:
+    {total_input_tokens:} Input Tokens
+    {total_generated_tokens:} Output Tokens
+        """
+        )
+    if "generated_tokens" in timing and "total_sampling" in timing:
+        sampling_time = timing["total_sampling"] / 1000
+        process_time = timing["prompt_process"] / 1000
+        model_time = timing["total_eval"] / 1000
+
+        print(
+            f"""    Process  || {process_time:5.2f} sec / {total_input_tokens:5} Tokens | {total_input_tokens/process_time:7.2f} Tokens Per Second
+    Sampling || {sampling_time:5.2f} sec / {total_generated_tokens:5} Tokens | {total_generated_tokens/sampling_time:7.2f} Tokens Per Second
+    Eval     || {model_time:5.2f} sec / {total_generated_tokens:5} Tokens | {total_generated_tokens/model_time:7.2f} Tokens Per Second
+        """
+        )
 
     formatted_clip_tokens = len(clip_tokenizer(formatted)["input_ids"])
     formatted_t5_tokens = len(t5_tokenizer(formatted)["input_ids"])
     print(
         f"""Length of Formatted Prompt: 
-        {formatted_clip_tokens} CLIP tokens
-        {formatted_t5_tokens} T5 tokens
+    {formatted_clip_tokens} CLIP tokens
+    {formatted_t5_tokens} T5 tokens
     """
     )
     print("=" * 87)

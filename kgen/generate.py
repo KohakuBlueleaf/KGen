@@ -4,12 +4,12 @@ from random import shuffle
 
 import torch
 
+# class Llama:
+#     pass
 try:
     from llama_cpp import Llama
 except ImportError:
-
-    class Llama:
-        pass
+    pass
 
 
 from transformers import (
@@ -50,7 +50,9 @@ def generate(
             repeat_penalty=repetition_penalty or 1,
             seed=kwargs.get("seed", None),
         )
-        return prompt + result["choices"][0]["text"]
+        prompt_tokens = result["usage"]["prompt_tokens"]
+        completion_tokens = result["usage"]["completion_tokens"]
+        return prompt + result["choices"][0]["text"], prompt_tokens, completion_tokens
     if "seed" in kwargs:
         set_seed(kwargs["seed"])
 
@@ -74,9 +76,11 @@ def generate(
         )
     s = generation_output[0]
     output = tokenizer.decode(s)
+    prompt_tokens = len(input_ids[0])
+    completion_tokens = len(s) - prompt_tokens
 
     torch.cuda.empty_cache()
-    return output
+    return output, prompt_tokens, completion_tokens
 
 
 def black_list_match(tag, black_list):
@@ -125,7 +129,7 @@ def tag_gen(
             pad_token_id=getattr(tokenizer, "eos_token_id", None),
             eos_token_id=getattr(tokenizer, "eos_token_id", None),
             seed=seed + iter_count,
-        )
+        )[0]
         iter_count += 1
         llm_gen = llm_gen.replace("</s>", "").replace("<s>", "")
         orig_prompt = llm_gen.split("<|input_end|>")[0]

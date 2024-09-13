@@ -74,7 +74,13 @@ def list_gguf():
     return files
 
 
-def load_model(model_name=model_list[0], gguf=False, device="cpu", subfolder=None):
+def load_model(
+    model_name=model_list[0],
+    gguf=False,
+    device="cpu",
+    subfolder=None,
+    tokenizer_name=None,
+):
     global text_model, tokenizer, current_model_name
     if gguf:
         model_name = os.path.basename(model_name)
@@ -88,7 +94,10 @@ def load_model(model_name=model_list[0], gguf=False, device="cpu", subfolder=Non
                 n_gpu_layers=0 if device == "cpu" else 1000,
                 verbose=False,
             )
-            tokenizer = None
+            if tokenizer_name is not None:
+                tokenizer = LlamaTokenizer.from_pretrained(tokenizer_name)
+            else:
+                tokenizer = None
             logger.info(f"Llama-cpp-python/gguf model {model_name} loaded")
             if device == "cuda":
                 logger.warning(
@@ -103,10 +112,12 @@ def load_model(model_name=model_list[0], gguf=False, device="cpu", subfolder=Non
             logger.warning(f"Llama-cpp-python/gguf model {model_name} load failed")
             model_name = f"KBlueLeaf/{model_repo_name}"
     logger.info(f"Using transformers model {model_name}")
+    if device == "cuda" and not torch.cuda.is_available():
+        device = "cpu"
     text_model = patch(
         LlamaForCausalLM.from_pretrained(
             model_name,
-            torch_dtype=torch.float32 if device == "cpu" else torch.float16,
+            torch_dtype=torch.float16,
             attn_implementation="flash_attention_2" if device == "cuda" else "sdpa",
             subfolder=subfolder,
         )
@@ -114,7 +125,9 @@ def load_model(model_name=model_list[0], gguf=False, device="cpu", subfolder=Non
         .eval()
         .to(device)
     )
-    tokenizer = LlamaTokenizer.from_pretrained(model_name, subfolder=subfolder)
+    tokenizer = LlamaTokenizer.from_pretrained(
+        tokenizer_name or model_name, subfolder=subfolder
+    )
     current_model_name = model_name.split("/")[-1]
     logger.info(f"Model {model_name} loaded")
 
