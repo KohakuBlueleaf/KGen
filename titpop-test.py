@@ -29,9 +29,17 @@ DEFAULT_FORMAT = """<|special|>, <|characters|>, <|copyrights|>,
 
 <|quality|>, <|meta|>, <|rating|>
 """
-BAN_TAGS = ["background", "name", "text", "joke"]
+BAN_TAGS = [
+    "background",
+    "name",
+    "text",
+    "joke",
+    "costume",
+    "alternative",
+    "speech",
+    "stickers",
+]
 
-tracer = VizTracer()
 
 logging.set_verbosity_error()
 print(f"threads: {torch.get_num_threads()} {torch.get_num_interop_threads()}")
@@ -43,11 +51,13 @@ t5_tokenizer = AutoTokenizer.from_pretrained("EleutherAI/pile-t5-large")
 #     "KBlueLeaf/TITPOP-200M-dev", device="cuda", subfolder="dan-cc-coyo_8000-step"
 # )
 models.load_model(
-    "TITPOP-200M-dev-F16.gguf",
+    "TITPOP-200M-dev_dan-cc-coyo_20000-step-F16.gguf",
     gguf=True,
     device="cuda",
 )
 generate(max_new_tokens=4)
+
+# tracer = VizTracer()
 # tracer.start()
 # generate(max_new_tokens=16)
 # tracer.stop()
@@ -231,7 +241,7 @@ tags = """
 1girl,
 daiichi ruby (umamusume), umamusume,
 
-solo, expressionless, fashion, shirt, shorts, thigh, loli,
+solo, cherry blossoms, outdoor, kimono, sideboob, expressionless,
 
 masterpiece, newest, absurdres, sensitive
 """
