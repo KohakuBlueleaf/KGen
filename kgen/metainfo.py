@@ -51,6 +51,9 @@ POSSIBLE_QUALITY_TAGS = [
     "source_pony",
 ]
 RATING_TAGS = ["safe", "general", "sfw", "sensitive", "nsfw", "explicit"]
+
+# minimum length of generated contents
+# unit: tags
 TARGET = {
     "very_short": 8,
     "short": 16,
@@ -58,8 +61,15 @@ TARGET = {
     "very_long": 48,
 }
 TARGET_TITPOP = {
-    "very_short": 10,
-    "short": 20,
-    "long": 40,
-    "very_long": 60,
+    "very_short": 6,
+    "short": 18,
+    "long": 36,
+    "very_long": 54,
+}
+# unit: sentences
+TARGET_TITPOP_NL = {
+    "very_short": 1,
+    "short": 2,
+    "long": 4,
+    "very_long": 6,
 }
