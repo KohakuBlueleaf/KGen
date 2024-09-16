@@ -5,6 +5,12 @@ from .. import models
 from ..generate import generate
 from ..formatter import seperate_tags
 from ..utils import shuffle_iterable, same_order_deduplicate
+from ..metainfo import (
+    TARGET_TITPOP,
+    TARGET_TITPOP_MAX,
+    TARGET_TITPOP_NL,
+    TARGET_TITPOP_NL_MAX,
+)
 
 
 BAN_TAGS = []
@@ -62,6 +68,8 @@ def parse_titpop_result(result: str):
     for type, content in parse.findall(result):
         type = type.strip()
         content = content.strip()
+        if TYPE_MAP.get(type, type) in result_dict:
+            continue
         if type == "tag":
             tags = [i.strip() for i in content.split(",") if i.strip()]
             content = seperate_tags(tags)
@@ -75,6 +83,7 @@ def parse_titpop_result(result: str):
                     result_dict[key] = []
                 else:
                     result_dict[key] = value
+            result_dict["tag"] = tags
         else:
             if content == "<|empty|>" or not content:
                 continue
@@ -176,6 +185,9 @@ def tag_filter(tag):
 
 
 def post_generate_process(parsed, meta, general, nl_prompt, mode, length, expand):
+    if not "to_long" in mode or "to_short" in mode:
+        parsed.pop("extended", None)
+        parsed.pop("generated", None)
     if "generated" in parsed and nl_prompt and not parsed.get("extended", "").strip():
         parsed["extended"] = parsed.pop("generated")
     input_tags = [tag.strip() for tag in general.split(",")]
@@ -202,34 +214,55 @@ def post_generate_process(parsed, meta, general, nl_prompt, mode, length, expand
             output_nl_prompts[-1]
         ]
 
-    if len(input_generals) + len(output_generals) > 48:
-        output_generals = output_generals[: max(48 - len(input_generals), 0)]
-    if len(input_prompts) + len(output_nl_prompts) > 8:
-        output_nl_prompts = output_nl_prompts[: max(5 - len(input_prompts), 0)]
+    max_length_tags = TARGET_TITPOP_MAX[length]
+    max_length_nl = TARGET_TITPOP_NL_MAX[length]
+
+    if len(input_generals) + len(output_generals) > max_length_tags:
+        output_generals = output_generals[: max(max_length_nl - len(input_generals), 0)]
+    if len(input_prompts) + len(output_nl_prompts) > max_length_nl:
+        output_nl_prompts = output_nl_prompts[: max(max_length_nl - len(input_prompts), 0)]
+    if "generated" in parsed:
+        generated_nl = [
+            tag.strip()
+            for tag in parsed.get("generated", "").split(".")
+            if tag_filter(tag.strip()) and tag.strip() not in input_prompts and tag.strip()
+        ]
+        if len(generated_nl) > max_length_nl:
+            generated_nl = generated_nl[:max_length_nl]
+    else:
+        generated_nl = []
 
     new_general = input_generals + output_generals
     new_nl_prompt = input_prompts + output_nl_prompts
 
-    print(new_general)
     parsed["general"] = same_order_deduplicate(new_general)
     parsed["extended"] = ". ".join(same_order_deduplicate(new_nl_prompt))
+    if generated_nl:
+        parsed["generated"] = ". ".join(same_order_deduplicate(generated_nl))
 
     return parsed
 
 
-def retry_criteria(parsed, check_slice=slice(0, -1)):
+def retry_criteria(parsed, check_slice=slice(0, -1), length="long"):
     checks = [
         len(parsed.get("special", []) + parsed.get("general", [])),
         len(parsed.get("extended", "").split(".")),
         len(parsed.get("generated", "").split(".")),
     ]
-    low_thresholds = [36, 4, 4]
+    low_thresholds = [
+        TARGET_TITPOP[length],
+        TARGET_TITPOP_NL[length],
+        TARGET_TITPOP_NL[length],
+    ]
     high_thresholds = [1000, 1000, 1000]
-    print(checks)
-    return all(
+
+    result = all(
         l <= i <= h
         for l, i, h in list(zip(low_thresholds, checks, high_thresholds))[check_slice]
     )
+
+    print(checks, result)
+    return result
 
 
 def generate_with_retry(
@@ -257,7 +290,7 @@ def generate_with_retry(
         )
         result, input_token_count, token_generated = generate(
             prompt=prompt,
-            temperature=0.5,
+            temperature=0.35,
             min_p=0.1,
             top_p=0.95,
             top_k=60,
@@ -285,7 +318,8 @@ def generate_with_retry(
             "short": slice(1, 2),
             "long": slice(2, 3),
         }
-        if retry_criteria(parsed, slices_map.get(target, slice(0, -1))):
+        print(mode, end=" ")
+        if retry_criteria(parsed, slices_map.get(target, slice(0, -1)), length):
             break
         iter_count += 1
         if result in prev_output:
@@ -295,7 +329,7 @@ def generate_with_retry(
             prev_output.add(result)
 
         nl_prompt = (
-            parsed.get("generated", []) or parsed.get("extended", []) or nl_prompt
+            parsed.get("extended", "") or parsed.get("generated", "") or nl_prompt
         )
         general = ", ".join(parsed.get("special", []) + parsed.get("general", []))
         nl_prompt = nl_prompt.strip()

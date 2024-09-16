@@ -66,10 +66,22 @@ TARGET_TITPOP = {
     "long": 36,
     "very_long": 54,
 }
+TARGET_TITPOP_MAX = {
+    "very_short": 18,
+    "short": 36,
+    "long": 54,
+    "very_long": 72,
+}
 # unit: sentences
 TARGET_TITPOP_NL = {
     "very_short": 1,
     "short": 2,
     "long": 4,
     "very_long": 6,
+}
+TARGET_TITPOP_NL_MAX = {
+    "very_short": 2,
+    "short": 4,
+    "long": 6,
+    "very_long": 8,
 }

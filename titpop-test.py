@@ -17,9 +17,11 @@ from kgen.generate import generate
 DEFAULT_FORMAT = """<|special|>, <|characters|>, <|copyrights|>, 
 <|artist|>, 
 
+<|extended|>
+
 <|general|>,
 
-<|extended|>.
+<|generated|>
 
 <|quality|>, <|meta|>, <|rating|>
 """
@@ -46,7 +48,7 @@ t5_tokenizer = AutoTokenizer.from_pretrained("EleutherAI/pile-t5-large")
 #     "KBlueLeaf/TITPOP-200M-dev", device="cuda", subfolder="dan-cc-coyo_8000-step"
 # )
 models.load_model(
-    "TITPOP-200M-dev_dan-cc-coyo_20000-step-F16.gguf",
+    "TITPOP-200M_dan-cc-coyo_epoch2-F16.gguf",
     gguf=True,
     device="cuda",
 )
@@ -67,7 +69,12 @@ generate(max_new_tokens=4)
 
 tags = nl_prompt = ""
 tags = """
-1girl, masterpiece, newest, absurdres, sensitive
+1girl,
+seiun sky (umamusume), umamusume,
+
+solo, leaning forward, cleavage, sky, dress,
+
+masterpiece, newest, absurdres, sensitive
 """
 # nl_prompt = ""
 # tags = """
