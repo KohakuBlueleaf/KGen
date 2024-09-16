@@ -118,7 +118,7 @@ def load_model(
         LlamaForCausalLM.from_pretrained(
             model_name,
             torch_dtype=torch.float16,
-            attn_implementation="flash_attention_2" if device == "cuda" else "sdpa",
+            attn_implementation="sdpa",
             subfolder=subfolder,
         )
         .requires_grad_(False)

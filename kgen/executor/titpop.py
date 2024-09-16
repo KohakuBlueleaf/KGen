@@ -118,7 +118,7 @@ def parse_titpop_request(
         models.model_have_quality_info.get(models.current_model_name, None)
         or add_quality
     ):
-        quality = ", ".join(tag_map.get("quality", []) or ["masterpiece"])
+        quality = ", ".join(tag_map.get("quality", []))
         meta["quality"] = quality
     tag_length = tag_length_target or "long"
 
@@ -185,7 +185,8 @@ def tag_filter(tag):
 
 
 def post_generate_process(parsed, meta, general, nl_prompt, mode, length, expand):
-    if not "to_long" in mode or "to_short" in mode:
+    if (mode is None 
+        or (not "to_long" in mode and not "to_short" in mode)):
         parsed.pop("extended", None)
         parsed.pop("generated", None)
     if "generated" in parsed and nl_prompt and not parsed.get("extended", "").strip():
@@ -220,12 +221,16 @@ def post_generate_process(parsed, meta, general, nl_prompt, mode, length, expand
     if len(input_generals) + len(output_generals) > max_length_tags:
         output_generals = output_generals[: max(max_length_nl - len(input_generals), 0)]
     if len(input_prompts) + len(output_nl_prompts) > max_length_nl:
-        output_nl_prompts = output_nl_prompts[: max(max_length_nl - len(input_prompts), 0)]
+        output_nl_prompts = output_nl_prompts[
+            : max(max_length_nl - len(input_prompts), 0)
+        ]
     if "generated" in parsed:
         generated_nl = [
             tag.strip()
             for tag in parsed.get("generated", "").split(".")
-            if tag_filter(tag.strip()) and tag.strip() not in input_prompts and tag.strip()
+            if tag_filter(tag.strip())
+            and tag.strip() not in input_prompts
+            and tag.strip()
         ]
         if len(generated_nl) > max_length_nl:
             generated_nl = generated_nl[:max_length_nl]
@@ -279,23 +284,31 @@ def generate_with_retry(
     retry_criteria=retry_criteria,
     total_timing=None,
     get_timing_detail=True,
+    **kwargs
 ):
     iter_count = 0
     prev_output = set()
     same_output_count = 0
     while iter_count <= max_retry and same_output_count < max_same_output:
-        target = mode.split("_to_")[-1]
+        if mode is not None:
+            target = mode.split("_to_")[-1]
+        else:
+            target = "tag"
         prompt = apply_titpop_prompt(
             meta, general, nl_prompt, mode, length, expand, gen_meta
         )
+        generation_setting = {
+            "temperature": 0.35,
+            "min_p": 0.1,
+            "top_p": 0.95,
+            "top_k": 60,
+            "max_new_tokens": 512,
+            "seed": seed + iter_count,
+        }
+        generation_setting.update(kwargs)
         result, input_token_count, token_generated = generate(
             prompt=prompt,
-            temperature=0.35,
-            min_p=0.1,
-            top_p=0.95,
-            top_k=60,
-            max_new_tokens=512,
-            seed=seed + iter_count,
+            **generation_setting
         )
         timing = {}
         timing["generate_pass"] = 1
@@ -310,6 +323,7 @@ def generate_with_retry(
         parsed = post_generate_process(
             parsed, meta, general, nl_prompt, mode, length, expand
         )
+        yield result, parsed
         if target == "long" and "generated" not in parsed:
             target = "short"
 
@@ -333,10 +347,10 @@ def generate_with_retry(
         )
         general = ", ".join(parsed.get("special", []) + parsed.get("general", []))
         nl_prompt = nl_prompt.strip()
-    return result, parsed
+    yield result, parsed
 
 
-def titpop_runner(meta, operations, general, nl_prompt, gen_meta=False):
+def titpop_runner_generator(meta, operations, general, nl_prompt, gen_meta=False, **kwargs):
     total_timing = {}
     for idx, (mode, length, expand) in enumerate(operations):
         is_last = idx == len(operations) - 1
@@ -346,7 +360,7 @@ def titpop_runner(meta, operations, general, nl_prompt, gen_meta=False):
         if length is None and not expand:
             parsed = parse_titpop_result(prompt)
             break
-        result, parsed = generate_with_retry(
+        for result, parsed in generate_with_retry(
             meta,
             general,
             nl_prompt,
@@ -354,9 +368,11 @@ def titpop_runner(meta, operations, general, nl_prompt, gen_meta=False):
             length,
             expand,
             gen_meta and is_last,
-            seed=random.randint(0, 2**32),
+            seed=kwargs.pop("seed", 0) or random.randint(0, 2**32),
             total_timing=total_timing,
-        )
+            **kwargs
+        ):
+            yield parsed, total_timing
         if not is_last:
             if "generated" in parsed and nl_prompt:
                 parsed["extended"] = parsed.pop("generated")
@@ -366,4 +382,12 @@ def titpop_runner(meta, operations, general, nl_prompt, gen_meta=False):
             general = ", ".join(parsed.get("special", []) + parsed.get("general", []))
             nl_prompt = nl_prompt.strip()
 
-    return parsed, total_timing
+    yield parsed, total_timing
+
+
+def titpop_runner(meta, operations, general, nl_prompt, gen_meta=False, **kwargs):
+    for parsed, timing in titpop_runner_generator(
+        meta, operations, general, nl_prompt, gen_meta, **kwargs
+    ):
+        pass
+    return parsed, timing
