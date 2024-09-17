@@ -17,11 +17,9 @@ from kgen.generate import generate
 DEFAULT_FORMAT = """<|special|>, <|characters|>, <|copyrights|>, 
 <|artist|>, 
 
-<|extended|>
+<|extended|>.
 
 <|general|>,
-
-<|generated|>
 
 <|quality|>, <|meta|>, <|rating|>
 """
@@ -70,9 +68,10 @@ generate(max_new_tokens=4)
 tags = nl_prompt = ""
 tags = """
 1girl,
-seiun sky (umamusume), umamusume,
+king halo (umamusume), umamusume,
+ogipote,
 
-solo, leaning forward, cleavage, sky, dress,
+solo, leaning forward, cleavage, sky, cowboy shot,
 
 masterpiece, newest, absurdres, sensitive
 """
