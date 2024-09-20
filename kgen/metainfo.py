@@ -60,26 +60,26 @@ TARGET = {
     "long": 32,
     "very_long": 48,
 }
-TARGET_TITPOP = {
+TARGET_TIPO = {
     "very_short": 6,
     "short": 18,
     "long": 36,
     "very_long": 54,
 }
-TARGET_TITPOP_MAX = {
+TARGET_TIPO_MAX = {
     "very_short": 18,
     "short": 36,
     "long": 54,
     "very_long": 72,
 }
 # unit: sentences
-TARGET_TITPOP_NL = {
+TARGET_TIPO_NL = {
     "very_short": 1,
     "short": 2,
     "long": 4,
     "very_long": 6,
 }
-TARGET_TITPOP_NL_MAX = {
+TARGET_TIPO_NL_MAX = {
     "very_short": 2,
     "short": 4,
     "long": 6,

@@ -9,7 +9,7 @@ from transformers import AutoTokenizer, logging
 from viztracer import VizTracer
 
 import kgen.models as models
-import kgen.executor.titpop as titpop
+import kgen.executor.tipo as tipo
 from kgen.formatter import seperate_tags, apply_format
 from kgen.generate import generate
 
@@ -23,7 +23,7 @@ DEFAULT_FORMAT = """<|special|>, <|characters|>, <|copyrights|>,
 
 <|quality|>, <|meta|>, <|rating|>
 """
-titpop.BAN_TAGS = [
+tipo.BAN_TAGS = [
     "background",
     "name",
     "text",
@@ -42,14 +42,16 @@ print(f"threads: {torch.get_num_threads()} {torch.get_num_interop_threads()}")
 clip_tokenizer = AutoTokenizer.from_pretrained("openai/clip-vit-base-patch32")
 t5_tokenizer = AutoTokenizer.from_pretrained("EleutherAI/pile-t5-large")
 
-# models.load_model(
-#     "KBlueLeaf/TITPOP-200M-dev", device="cuda", subfolder="dan-cc-coyo_8000-step"
-# )
 models.load_model(
-    "TITPOP-200M_dan-cc-coyo_epoch2-F16.gguf",
-    gguf=True,
-    device="cuda",
+    "Amber-River/tipo", 
+    device="cuda", 
+    subfolder="500M-epoch3"
 )
+# models.load_model(
+#     "TIPO-500M_epoch3-F16.gguf",
+#     gguf=True,
+#     device="cuda",
+# )
 generate(max_new_tokens=4)
 
 # tracer = VizTracer()
@@ -61,7 +63,7 @@ generate(max_new_tokens=4)
 #     generate(
 #         max_new_tokens=16,
 #     )
-# prof.export_chrome_trace("titpop-test.json")
+# prof.export_chrome_trace("tipo-test.json")
 # exit()
 
 
@@ -87,14 +89,14 @@ An illustration of a girl
 def task(tags, nl_prompt):
     width = 832
     height = 1216
-    meta, operations, general, nl_prompt = titpop.parse_titpop_request(
+    meta, operations, general, nl_prompt = tipo.parse_tipo_request(
         seperate_tags(tags.split(",")),
         nl_prompt,
         tag_length_target="long",
         generate_extra_nl_prompt="<|generated|>" in DEFAULT_FORMAT or not nl_prompt,
     )
     meta["aspect_ratio"] = f"{width / height:.1f}"
-    result, timing = titpop.titpop_runner(meta, operations, general, nl_prompt)
+    result, timing = tipo.tipo_runner(meta, operations, general, nl_prompt)
     formatted = re.sub(r"([()\[\]])", r"\\\1", apply_format(result, DEFAULT_FORMAT))
     return formatted, timing
 

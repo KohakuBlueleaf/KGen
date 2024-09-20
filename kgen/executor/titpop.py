@@ -6,17 +6,17 @@ from ..generate import generate
 from ..formatter import seperate_tags
 from ..utils import shuffle_iterable, same_order_deduplicate
 from ..metainfo import (
-    TARGET_TITPOP,
-    TARGET_TITPOP_MAX,
-    TARGET_TITPOP_NL,
-    TARGET_TITPOP_NL_MAX,
+    TARGET_TIPO,
+    TARGET_TIPO_MAX,
+    TARGET_TIPO_NL,
+    TARGET_TIPO_NL_MAX,
 )
 
 
 BAN_TAGS = []
 
 
-def apply_titpop_prompt(meta, general, nl_prompt, mode, length, expand, gen_meta=False):
+def apply_tipo_prompt(meta, general, nl_prompt, mode, length, expand, gen_meta=False):
     content = {
         "tag": general,
     }
@@ -62,7 +62,7 @@ TYPE_MAP = {
 }
 
 
-def parse_titpop_result(result: str):
+def parse_tipo_result(result: str):
     result = "\n" + result.strip("<s>").strip("</s>").strip()
     result_dict = {}
     for type, content in parse.findall(result):
@@ -91,7 +91,7 @@ def parse_titpop_result(result: str):
     return result_dict
 
 
-def parse_titpop_request(
+def parse_tipo_request(
     tag_map,
     nl_prompt="",
     expand_tags=True,
@@ -215,8 +215,8 @@ def post_generate_process(parsed, meta, general, nl_prompt, mode, length, expand
             output_nl_prompts[-1]
         ]
 
-    max_length_tags = TARGET_TITPOP_MAX[length]
-    max_length_nl = TARGET_TITPOP_NL_MAX[length]
+    max_length_tags = TARGET_TIPO_MAX[length]
+    max_length_nl = TARGET_TIPO_NL_MAX[length]
 
     if len(input_generals) + len(output_generals) > max_length_tags:
         output_generals = output_generals[: max(max_length_nl - len(input_generals), 0)]
@@ -255,9 +255,9 @@ def retry_criteria(parsed, check_slice=slice(0, -1), length="long"):
         len(parsed.get("generated", "").split(".")),
     ]
     low_thresholds = [
-        TARGET_TITPOP[length],
-        TARGET_TITPOP_NL[length],
-        TARGET_TITPOP_NL[length],
+        TARGET_TIPO[length],
+        TARGET_TIPO_NL[length],
+        TARGET_TIPO_NL[length],
     ]
     high_thresholds = [1000, 1000, 1000]
 
@@ -294,7 +294,7 @@ def generate_with_retry(
             target = mode.split("_to_")[-1]
         else:
             target = "tag"
-        prompt = apply_titpop_prompt(
+        prompt = apply_tipo_prompt(
             meta, general, nl_prompt, mode, length, expand, gen_meta
         )
         generation_setting = {
@@ -319,7 +319,7 @@ def generate_with_retry(
         if total_timing is not None:
             for key in timing:
                 total_timing[key] = total_timing.get(key, 0) + timing[key]
-        parsed = parse_titpop_result(result)
+        parsed = parse_tipo_result(result)
         parsed = post_generate_process(
             parsed, meta, general, nl_prompt, mode, length, expand
         )
@@ -350,15 +350,15 @@ def generate_with_retry(
     yield result, parsed
 
 
-def titpop_runner_generator(meta, operations, general, nl_prompt, gen_meta=False, **kwargs):
+def tipo_runner_generator(meta, operations, general, nl_prompt, gen_meta=False, **kwargs):
     total_timing = {}
     for idx, (mode, length, expand) in enumerate(operations):
         is_last = idx == len(operations) - 1
-        prompt = apply_titpop_prompt(
+        prompt = apply_tipo_prompt(
             meta, general, nl_prompt, mode, length, expand, gen_meta and is_last
         )
         if length is None and not expand:
-            parsed = parse_titpop_result(prompt)
+            parsed = parse_tipo_result(prompt)
             break
         for result, parsed in generate_with_retry(
             meta,
@@ -385,8 +385,8 @@ def titpop_runner_generator(meta, operations, general, nl_prompt, gen_meta=False
     yield parsed, total_timing
 
 
-def titpop_runner(meta, operations, general, nl_prompt, gen_meta=False, **kwargs):
-    for parsed, timing in titpop_runner_generator(
+def tipo_runner(meta, operations, general, nl_prompt, gen_meta=False, **kwargs):
+    for parsed, timing in tipo_runner_generator(
         meta, operations, general, nl_prompt, gen_meta, **kwargs
     ):
         pass

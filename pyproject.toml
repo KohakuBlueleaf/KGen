@@ -3,9 +3,9 @@ requires = ["setuptools>=61.0", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "titpop-kgen"
+name = "tipo-kgen"
 version = "0.1.0"
-description = "TITPOP: Text to Image with Text Presampling for Optimal Prompting"
+description = "TIPO: Text to Image with text Presampling for Optimal prompting"
 authors = [
     { name = "Shih-Ying Yeh(KohakuBlueLeaf)", email = "apolloyeh0123@gmail.com" },
 ]
