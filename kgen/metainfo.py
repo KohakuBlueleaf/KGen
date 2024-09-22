@@ -75,13 +75,13 @@ TARGET_TIPO_MAX = {
 # unit: sentences
 TARGET_TIPO_NL = {
     "very_short": 1,
-    "short": 2,
-    "long": 4,
-    "very_long": 6,
+    "short": 3,
+    "long": 5,
+    "very_long": 8,
 }
 TARGET_TIPO_NL_MAX = {
     "very_short": 2,
     "short": 4,
-    "long": 6,
-    "very_long": 8,
+    "long": 8,
+    "very_long": 12,
 }

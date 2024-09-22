@@ -80,6 +80,7 @@ def load_model(
     device="cpu",
     subfolder=None,
     tokenizer_name=None,
+    **kwargs,
 ):
     global text_model, tokenizer, current_model_name
     if gguf:
@@ -93,6 +94,7 @@ def load_model(
                 n_ctx=1024,
                 n_gpu_layers=0 if device == "cpu" else 1000,
                 verbose=False,
+                **kwargs,
             )
             if tokenizer_name is not None:
                 tokenizer = LlamaTokenizer.from_pretrained(tokenizer_name)
@@ -120,6 +122,7 @@ def load_model(
             torch_dtype=torch.float16,
             attn_implementation="sdpa",
             subfolder=subfolder,
+            **kwargs,
         )
         .requires_grad_(False)
         .eval()

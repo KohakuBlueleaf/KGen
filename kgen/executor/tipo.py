@@ -185,10 +185,14 @@ def tag_filter(tag):
 
 
 def post_generate_process(parsed, meta, general, nl_prompt, mode, length, expand):
-    if (mode is None 
-        or (not "to_long" in mode and not "to_short" in mode)):
+    if mode is None:
         parsed.pop("extended", None)
         parsed.pop("generated", None)
+    else:
+        if not "long" in mode:
+            parsed.pop("generated", None)
+        if not "short" in mode:
+            parsed.pop("extended", None)
     if "generated" in parsed and nl_prompt and not parsed.get("extended", "").strip():
         parsed["extended"] = parsed.pop("generated")
     input_tags = [tag.strip() for tag in general.split(",")]
@@ -208,8 +212,7 @@ def post_generate_process(parsed, meta, general, nl_prompt, mode, length, expand
         if tag_filter(tag.strip()) and tag.strip() not in input_prompts and tag.strip()
     ]
     if output_nl_prompts and input_prompts[-1] in output_nl_prompts[0]:
-        input_prompts[-1] = output_nl_prompts[0]
-        output_nl_prompts.pop(0)
+        input_prompts[-1] = output_nl_prompts.pop(0)
     if output_nl_prompts:
         output_nl_prompts = shuffle_iterable(output_nl_prompts[:-1]) + [
             output_nl_prompts[-1]
@@ -284,7 +287,7 @@ def generate_with_retry(
     retry_criteria=retry_criteria,
     total_timing=None,
     get_timing_detail=True,
-    **kwargs
+    **kwargs,
 ):
     iter_count = 0
     prev_output = set()
@@ -307,8 +310,7 @@ def generate_with_retry(
         }
         generation_setting.update(kwargs)
         result, input_token_count, token_generated = generate(
-            prompt=prompt,
-            **generation_setting
+            prompt=prompt, **generation_setting
         )
         timing = {}
         timing["generate_pass"] = 1
@@ -332,7 +334,7 @@ def generate_with_retry(
             "short": slice(1, 2),
             "long": slice(2, 3),
         }
-        print(mode, end=" ")
+        # print(mode, end=" ")
         if retry_criteria(parsed, slices_map.get(target, slice(0, -1)), length):
             break
         iter_count += 1
@@ -350,7 +352,9 @@ def generate_with_retry(
     yield result, parsed
 
 
-def tipo_runner_generator(meta, operations, general, nl_prompt, gen_meta=False, **kwargs):
+def tipo_runner_generator(
+    meta, operations, general, nl_prompt, gen_meta=False, **kwargs
+):
     total_timing = {}
     for idx, (mode, length, expand) in enumerate(operations):
         is_last = idx == len(operations) - 1
@@ -370,7 +374,7 @@ def tipo_runner_generator(meta, operations, general, nl_prompt, gen_meta=False, 
             gen_meta and is_last,
             seed=kwargs.pop("seed", 0) or random.randint(0, 2**32),
             total_timing=total_timing,
-            **kwargs
+            **kwargs,
         ):
             yield parsed, total_timing
         if not is_last:
