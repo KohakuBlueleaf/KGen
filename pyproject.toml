@@ -19,8 +19,8 @@ dependencies = [
 ]
 urls = { "Homepage" = "https://github.com/KohakuBlueleaf/KGen" }
 
+[tool.setuptools]
+package-dir = {"" = "src"}
+
 [tool.setuptools.package-data]
 kgen = ["**/*.txt"]
-
-[tool.setuptools.packages.find]
-include = ["*"]
