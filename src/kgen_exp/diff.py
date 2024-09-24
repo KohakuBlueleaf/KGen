@@ -5,7 +5,7 @@ from PIL import Image
 
 import numpy as np
 import torch
-from diffusers import StableDiffusionXLKDiffusionPipeline, UNet2DConditionModel
+from diffusers import StableDiffusionXLKDiffusionPipeline, UNet2DConditionModel, AutoencoderKL
 from k_diffusion.external import CompVisDenoiser
 from k_diffusion.sampling import get_sigmas_polyexponential
 from k_diffusion.sampling import sample_dpmpp_2m_sde
@@ -54,9 +54,10 @@ def model_forward(k_diffusion_model: torch.nn.Module):
 
 
 def load_model(model_id="KBlueLeaf/Kohaku-XL-Zeta", device="cuda"):
+    vae: AutoencoderKL = AutoencoderKL.from_pretrained("madebyollin/sdxl-vae-fp16-fix").to(device)
     pipe: StableDiffusionXLKDiffusionPipeline
     pipe = StableDiffusionXLKDiffusionPipeline.from_pretrained(
-        model_id, torch_dtype=torch.float16
+        model_id, torch_dtype=torch.float16, vae=vae
     ).to(device)
     pipe.vae.config.force_upcast = False
     pipe.vae.eval().half()
@@ -191,9 +192,12 @@ def generate(
     )
     added_cond = {
         "time_ids": time_ids,
-        "text_embeds": torch.concat([pooled_prompt_embeds, negative_pooled_prompt_embeds]),
+        "text_embeds": torch.concat(
+            [pooled_prompt_embeds, negative_pooled_prompt_embeds]
+        ),
     }
     text_ctx = torch.cat([prompt_embeds, negative_prompt_embeds])
+
     def cfg_wrapper(x, sigma, sigma_cond=None):
         if sigma_cond is not None:
             sigma_cond = torch.cat([sigma_cond] * 2)
@@ -205,11 +209,15 @@ def generate(
         ).chunk(2)
         cfg_output = uncond + guidance_scale * (cond - uncond)
         return cfg_output
+
     sigmas = pipe.scheduler.sigmas
-    x0 = torch.randn(
-        (prompt_embeds.size(0), 4, height // 8, width // 8),
-    ).to(prompt_embeds) * sigmas[0]
-    result = sample_dpmpp_2m_sde(cfg_wrapper, x0, sigmas)
+    x0 = (
+        torch.randn(
+            (1, 4, height // 8, width // 8),
+        ).to(prompt_embeds).repeat(prompt_embeds.size(0), 1, 1, 1)
+        * sigmas[0]
+    )
+    result = sample_dpmpp_2m_sde(cfg_wrapper, x0, sigmas, eta=0.35)
     result /= pipe.vae.config.scaling_factor
     image_tensors = []
     for latent in result:
