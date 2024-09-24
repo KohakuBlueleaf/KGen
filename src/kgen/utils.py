@@ -46,7 +46,7 @@ def remove_repeated_suffix(text):
     for idx, k in enumerate(Z[::-1]):
         if k != 0:
             break
-    text = text[:idx+k-1]
+    text = text[: idx + k - 1]
     return text
 
 
