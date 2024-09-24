@@ -16,12 +16,12 @@ def load_prompts(file):
     datas = []
     for data in orjsonl.load(file):
         org_data = data["entry"]
-        index = org_data["index"]
+        index = org_data["key"]
         result1 = data["result1"]
         result2 = data["result2"]
-        org_prompt1 = remove_repeated_suffix(org_data["short_caption"].strip())
+        org_prompt1 = remove_repeated_suffix(org_data["caption_llava_short"].strip())
         org_prompt2 = ".".join(
-            remove_repeated_suffix(org_data["detail_caption"].strip()).split(".")[:2]
+            remove_repeated_suffix(org_data["caption_llava"].strip()).split(".")[:2]
         )
         gen_prompt1 = result1["generated"]
         gen_prompt2 = result2["extended"]
@@ -108,11 +108,11 @@ def create_image_grid_with_prompts(
 
 
 if __name__ == "__main__":
-    pipe = load_model("stabilityai/stable-diffusion-xl-base-1.0", "cuda:0")
-    datas = load_prompts("./data/gbc-output.jsonl")
+    pipe = load_model("stabilityai/stable-diffusion-xl-base-1.0", "cuda:1")
+    datas = load_prompts("./data/coyo-output.jsonl")
 
     for entry in tqdm(datas):
         index = entry[0]
         result = generate_entry(entry, pipe)
         for i, (img, prompt) in enumerate(result):
-            img.save(f"./output/gbc-img/{index}_{prompt}.png")
+            img.save(f"./output/coyo-img/{index}_{prompt}.png")

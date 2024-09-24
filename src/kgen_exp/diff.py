@@ -5,7 +5,11 @@ from PIL import Image
 
 import numpy as np
 import torch
-from diffusers import StableDiffusionXLKDiffusionPipeline, UNet2DConditionModel, AutoencoderKL
+from diffusers import (
+    StableDiffusionXLKDiffusionPipeline,
+    UNet2DConditionModel,
+    AutoencoderKL,
+)
 from k_diffusion.external import CompVisDenoiser
 from k_diffusion.sampling import get_sigmas_polyexponential
 from k_diffusion.sampling import sample_dpmpp_2m_sde
@@ -54,7 +58,9 @@ def model_forward(k_diffusion_model: torch.nn.Module):
 
 
 def load_model(model_id="KBlueLeaf/Kohaku-XL-Zeta", device="cuda"):
-    vae: AutoencoderKL = AutoencoderKL.from_pretrained("madebyollin/sdxl-vae-fp16-fix").to(device)
+    vae: AutoencoderKL = AutoencoderKL.from_pretrained(
+        "madebyollin/sdxl-vae-fp16-fix"
+    ).to(device)
     pipe: StableDiffusionXLKDiffusionPipeline
     pipe = StableDiffusionXLKDiffusionPipeline.from_pretrained(
         model_id, torch_dtype=torch.float16, vae=vae
@@ -104,7 +110,11 @@ def encode_prompts(
     target_length = cutoff_length or math.ceil(length / max_length) * max_length + 2
 
     input_ids = pipe.tokenizer(
-        prompts, padding="max_length", max_length=target_length, return_tensors="pt"
+        prompts,
+        padding="max_length",
+        max_length=target_length,
+        truncation=True,
+        return_tensors="pt",
     ).input_ids
     input_ids = (
         input_ids[:, 0:1],
@@ -112,7 +122,11 @@ def encode_prompts(
         input_ids[:, -1:],
     )
     input_ids2 = pipe.tokenizer_2(
-        prompts, padding="max_length", max_length=target_length, return_tensors="pt"
+        prompts,
+        padding="max_length",
+        max_length=target_length,
+        truncation=True,
+        return_tensors="pt",
     ).input_ids
     input_ids2 = (
         input_ids2[:, 0:1],
@@ -214,7 +228,9 @@ def generate(
     x0 = (
         torch.randn(
             (1, 4, height // 8, width // 8),
-        ).to(prompt_embeds).repeat(prompt_embeds.size(0), 1, 1, 1)
+        )
+        .to(prompt_embeds)
+        .repeat(prompt_embeds.size(0), 1, 1, 1)
         * sigmas[0]
     )
     result = sample_dpmpp_2m_sde(cfg_wrapper, x0, sigmas, eta=0.35)

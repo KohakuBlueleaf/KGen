@@ -66,7 +66,7 @@ def remove_repeated_suffix(text):
     for idx, k in enumerate(Z[::-1]):
         if k != 0:
             break
-    text = text[:idx+k-1]
+    text = text[: idx + k - 1]
     return text
 
 
@@ -80,9 +80,11 @@ if __name__ == "__main__":
     with open("./danbooru.json", "r") as f:
         data = loads(f.read())
     with open("./danbooru-output.jsonl", "ab") as f:
-        for entry in tqdm.tqdm(data[1485+6543:10000], smoothing=0.01):
+        for entry in tqdm.tqdm(data[1485 + 6543 : 10000], smoothing=0.01):
             short_caption = remove_repeated_suffix(entry["florence_short"])
-            long_caption = remove_repeated_suffix(entry.get("phi3v_horny", None) or entry["florence_long"])
+            long_caption = remove_repeated_suffix(
+                entry.get("phi3v_horny", None) or entry["florence_long"]
+            )
             # Some outlier have TOO MANY tags, need to cutoff
             info_tags = (
                 entry["artist"][:5]
@@ -97,11 +99,13 @@ if __name__ == "__main__":
             random.shuffle(content_tags)
             tags = info_tags + content_tags[:5]
             # expand tag + generate NL
-            result1 = task(', '.join(tags), "", True)
+            result1 = task(", ".join(tags), "", True)
             # expand long to tag
             result2 = task("", long_caption, False)
             # expand both short and tag and generate new prompt
-            result3 = task(', '.join(tags), ".".join(short_caption.split(".")[:2]), True)
+            result3 = task(
+                ", ".join(tags), ".".join(short_caption.split(".")[:2]), True
+            )
             generated_entry = {
                 "entry": entry,
                 "result1": result1,
