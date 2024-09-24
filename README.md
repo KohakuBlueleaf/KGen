@@ -15,7 +15,40 @@ pip install tipo-kgen
 ```
 
 Use in code:
-Read the [Example code](example.py) for more informations.
+Read the [Example code](scripts/example.py) or [TIPO-test script](scripts/tipo-test.py) for more informations.
+
+## TIPO
+
+TIPO: Text to Image with text Presampling for Optimal prompting
+
+TIPO is a project based on the success of DTG project.
+The main difference between TIPO and DTG is:
+
+1. TIPO is trained with both Natural Language captions and Danbooru tags, the "nl+tags" data are also not only from danbooru but also some general text-image dataset like Coyo-11M
+2. TIPO is trained with better format which achieve some ability on "generate meta infos" such as artists/characters. (or, you can say TIPO have ability to "choose" which artist tag is suitable with current content)
+3. TIPO is trained on 30M entries dataset, with more than 25M entries have NL caption, more than 18M entries have tags
+
+### Model card
+
+|                   | TIPO-200M                                                         | TIPO-500M                           |
+| ----------------- | ----------------------------------------------------------------- | ----------------------------------- |
+| Arch              | LLaMA                                                             | LLaMA                               |
+| Max ctx length    | 1024                                                              | 1024                                |
+| Batch Size        | 2048                                                              | 3584                                |
+| Training dataset  | Danbooru, GBC10M, 5epoch<br />Danbooru, GBC10M, Coyo11M, 3epoch | Danbooru, GBC10M, Coyo11M, 5epoch |
+| Real Token Seen*  | 40B token                                                         | 30B token                           |
+| Training Hardware | RTX 3090 x 4                                                      | H100 x 8                            |
+| Training Time     | 420 hour`                                                         | 100 hour`                           |
+
+*: We only count "non-padding token" in the token seen, since all the training data have very large length range.
+`: Since the training data is pretty short, it cost more time to reach same token seen than general LLM pretraining.
+As reference, with 4096 as max ctx length and almost all the data have reach that length, you may only need 2days to reach 10B token seen on RTX 3090 x 4 with 200M model.
+
+### Usage
+A Simple DEMO for TIPO (with t2i functionality included):
+https://huggingface.co/spaces/KBlueLeaf/TIPO-DEMO
+
+SD-WebUI extension or ComfyUI node are under developement.
 
 ## DanTagGen
 
