@@ -35,6 +35,10 @@ model_have_quality_info = {
     "DanTagGen-gamma": False,
 }
 
+tipo_model_list = [
+    ("KBlueLeaf/TIPO-200M-dev", ["TIPO-200M-40Btok-F16.gguf"]),
+]
+
 
 try:
     from llama_cpp import Llama

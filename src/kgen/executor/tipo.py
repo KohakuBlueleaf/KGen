@@ -84,6 +84,10 @@ def parse_tipo_result(result: str):
                 else:
                     result_dict[key] = value
             result_dict["tag"] = tags
+        elif type not in {"short", "long"}:
+            result_dict[TYPE_MAP.get(type, type)] = [
+                i.strip() for i in content.split(",") if i.strip()
+            ]
         else:
             if content == "<|empty|>" or not content:
                 continue
@@ -179,7 +183,7 @@ def parse_tipo_request(
 
 
 def tag_filter(tag):
-    if any(b in tag for b in BAN_TAGS):
+    if any(b in tag or re.match(b, tag) is not None for b in BAN_TAGS):
         return False
     return True
 
@@ -269,7 +273,6 @@ def retry_criteria(parsed, check_slice=slice(0, -1), length="long"):
         for l, i, h in list(zip(low_thresholds, checks, high_thresholds))[check_slice]
     )
 
-    print(checks, result)
     return result
 
 
