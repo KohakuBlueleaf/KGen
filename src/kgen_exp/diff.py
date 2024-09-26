@@ -90,6 +90,8 @@ def encode_prompts(
     prompt: str | list[str],
     neg_prompt: str | list[str] = "",
     cutoff_length: int | None = 225,
+    padding_to_max_length: bool = True,
+    take_all_eos: bool = False,
 ):
     if not isinstance(prompt, list):
         prompt = [prompt]
@@ -106,8 +108,11 @@ def encode_prompts(
 
     input_ids = pipe.tokenizer(prompts, padding=True, return_tensors="pt")
     input_ids2 = pipe.tokenizer_2(prompts, padding=True, return_tensors="pt")
+    input_ids_neg = pipe.tokenizer(neg_prompt, padding=True, return_tensors="pt")
     length = max(input_ids.input_ids.size(-1), input_ids2.input_ids.size(-1))
+    neg_length = input_ids_neg.input_ids.size(-1)
     target_length = cutoff_length or math.ceil(length / max_length) * max_length + 2
+    neg_groups = math.ceil(neg_length / max_length)
 
     input_ids = pipe.tokenizer(
         prompts,
@@ -142,6 +147,9 @@ def encode_prompts(
         result = pipe.text_encoder(input_id1, output_hidden_states=True).hidden_states[
             -2
         ]
+        if take_all_eos:
+            concat_embeds.append(result)
+            continue
         if i == 0:
             concat_embeds.append(result[:, :-1])
         elif i == input_ids[1].shape[-1] - max_length:
@@ -157,6 +165,9 @@ def encode_prompts(
         ).to(pipe.device)
         hidden_states = pipe.text_encoder_2(input_id2, output_hidden_states=True)
         pooled_embeds2.append(hidden_states[0])
+        if take_all_eos:
+            concat_embeds2.append(hidden_states.hidden_states[-2])
+            continue
         if i == 0:
             concat_embeds2.append(hidden_states.hidden_states[-2][:, :-1])
         elif i == input_ids2[1].shape[-1] - max_length:
@@ -168,9 +179,24 @@ def encode_prompts(
     prompt_embeds2 = torch.cat(concat_embeds2, dim=1)
     prompt_embeds = torch.cat([prompt_embeds, prompt_embeds2], dim=-1)
 
-    pooled_embeds2 = torch.mean(torch.stack(pooled_embeds2, dim=0), dim=0)
+    pooled = torch.mean(torch.stack(pooled_embeds2, dim=0), dim=0)
 
-    return prompt_embeds.chunk(2), pooled_embeds2.chunk(2)
+    embed, neg_embed = prompt_embeds.chunk(2)
+    pooled, neg_pooled = pooled.chunk(2)
+    if not padding_to_max_length:
+        if take_all_eos:
+            neg_embed = torch.cat([concat_embeds[0][1:], concat_embeds2[0][1:]], dim=-1)
+        else:
+            neg_embed = torch.cat(
+                [neg_embed[:, : neg_groups * max_length + 1, :], neg_embed[:, -1:, :]],
+                dim=1,
+            )
+        neg_pooled_embeds = torch.stack(
+            [emb.chunk(2)[-1] for emb in pooled_embeds2][:neg_groups]
+        )
+        neg_pooled = torch.mean(neg_pooled_embeds, dim=0)
+
+    return (embed, neg_embed), (pooled, neg_pooled)
 
 
 def vae_image_postprocess(image_tensor: torch.Tensor) -> Image.Image:
@@ -199,30 +225,46 @@ def generate(
 ):
     pipe.scheduler.set_timesteps(num_inference_steps)
     unet: CompVisDenoiser = pipe.k_diffusion_model
-    time_ids = (
-        torch.tensor([height, width, 0, 0, height, width])
-        .repeat(2 * prompt_embeds.size(0), 1)
-        .to(prompt_embeds)
-    )
-    added_cond = {
-        "time_ids": time_ids,
-        "text_embeds": torch.concat(
-            [pooled_prompt_embeds, negative_pooled_prompt_embeds]
-        ),
-    }
-    text_ctx = torch.cat([prompt_embeds, negative_prompt_embeds])
 
-    def cfg_wrapper(x, sigma, sigma_cond=None):
-        if sigma_cond is not None:
-            sigma_cond = torch.cat([sigma_cond] * 2)
-        cond, uncond = unet(
-            torch.cat([x] * 2),
-            torch.cat([sigma] * 2),
-            cond=text_ctx,
-            added_cond_kwargs=added_cond,
-        ).chunk(2)
-        cfg_output = uncond + guidance_scale * (cond - uncond)
-        return cfg_output
+    if prompt_embeds.shape == negative_prompt_embeds.shape:
+        time_ids = (
+            torch.tensor([height, width, 0, 0, height, width])
+            .repeat(2 * prompt_embeds.size(0), 1)
+            .to(prompt_embeds)
+        )
+        added_cond = {
+            "time_ids": time_ids,
+            "text_embeds": torch.concat(
+                [pooled_prompt_embeds, negative_pooled_prompt_embeds]
+            ),
+        }
+        text_ctx = torch.cat([prompt_embeds, negative_prompt_embeds])
+
+        def cfg_wrapper(x, sigma):
+            cond, uncond = unet(
+                torch.cat([x] * 2),
+                torch.cat([sigma] * 2),
+                cond=text_ctx,
+                added_cond_kwargs=added_cond,
+            ).chunk(2)
+            cfg_output = uncond + guidance_scale * (cond - uncond)
+            return cfg_output
+
+    else:
+        time_ids = torch.tensor([height, width, 0, 0, height, width]).to(prompt_embeds)
+        added_cond_pos = {"time_ids": time_ids, "text_embeds": pooled_prompt_embeds}
+        added_cond_neg = {
+            "time_ids": time_ids,
+            "text_embeds": negative_pooled_prompt_embeds,
+        }
+
+        def cfg_wrapper(x, sigma):
+            cond = unet(x, sigma, cond=prompt_embeds, added_cond_kwargs=added_cond_pos)
+            uncond = unet(
+                x, sigma, cond=negative_prompt_embeds, added_cond_kwargs=added_cond_neg
+            )
+            cfg_output = uncond + guidance_scale * (cond - uncond)
+            return cfg_output
 
     sigmas = pipe.scheduler.sigmas
     x0 = (
