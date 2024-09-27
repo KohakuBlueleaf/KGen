@@ -57,14 +57,20 @@ def model_forward(k_diffusion_model: torch.nn.Module):
     return forward
 
 
-def load_model(model_id="KBlueLeaf/Kohaku-XL-Zeta", device="cuda"):
-    vae: AutoencoderKL = AutoencoderKL.from_pretrained(
-        "madebyollin/sdxl-vae-fp16-fix"
-    ).to(device)
-    pipe: StableDiffusionXLKDiffusionPipeline
-    pipe = StableDiffusionXLKDiffusionPipeline.from_pretrained(
-        model_id, torch_dtype=torch.float16, vae=vae
-    ).to(device)
+def load_model(model_id="KBlueLeaf/Kohaku-XL-Zeta", device="cuda", custom_vae=False):
+    if custom_vae:
+        vae: AutoencoderKL = AutoencoderKL.from_pretrained(
+            "madebyollin/sdxl-vae-fp16-fix"
+        ).to(device)
+        pipe: StableDiffusionXLKDiffusionPipeline
+        pipe = StableDiffusionXLKDiffusionPipeline.from_pretrained(
+            model_id, torch_dtype=torch.float16, vae=vae
+        ).to(device)
+    else:
+        pipe: StableDiffusionXLKDiffusionPipeline
+        pipe = StableDiffusionXLKDiffusionPipeline.from_pretrained(
+            model_id, torch_dtype=torch.float16
+        ).to(device)
     pipe.vae.config.force_upcast = False
     pipe.vae.eval().half()
     pipe.text_encoder.eval().half()
@@ -275,7 +281,9 @@ def generate(
         .repeat(prompt_embeds.size(0), 1, 1, 1)
         * sigmas[0]
     )
-    result = sample_dpmpp_2m_sde(cfg_wrapper, x0, sigmas, eta=0.35)
+    result = sample_dpmpp_2m_sde(
+        cfg_wrapper, x0, sigmas.to(prompt_embeds.device), eta=1.0
+    )
     result /= pipe.vae.config.scaling_factor
     image_tensors = []
     for latent in result:

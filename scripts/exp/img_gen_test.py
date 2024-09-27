@@ -27,7 +27,7 @@ worst quality
 """.strip()
 
 
-pipe = load_model("OnomaAIResearch/Illustrious-xl-early-release-v0", "cuda")
+pipe = load_model("KBlueLeaf/Kohaku-XL-Zeta", "cuda")
 
 
 if __name__ == "__main__":
@@ -36,7 +36,9 @@ if __name__ == "__main__":
             set_seed(0)
             (prompt_embeds, neg_prompt_embeds), (pooled_embeds2, neg_pooled_embeds2) = (
                 encode_prompts(
-                    pipe, PROMPTS, NEGATIVE,
+                    pipe,
+                    PROMPTS,
+                    NEGATIVE,
                     cutoff_length=300,
                     padding_to_max_length=pad,
                     take_all_eos=eos,
@@ -56,4 +58,4 @@ if __name__ == "__main__":
                 1216,
                 5,
             )
-            images[0].save(f"./output/test-{pad=}-{eos=}.png")
+            images[0].save(f"./output/kxl-test-{pad=}-{eos=}.png")
