@@ -120,12 +120,13 @@ def load_model(
     logger.info(f"Using transformers model {model_name}")
     if device == "cuda" and not torch.cuda.is_available():
         device = "cpu"
+    if subfolder is not None:
+        kwargs["subfolder"] = subfolder
     text_model = patch(
         LlamaForCausalLM.from_pretrained(
             model_name,
             torch_dtype=torch.float16,
             attn_implementation="sdpa",
-            subfolder=subfolder,
             **kwargs,
         )
         .requires_grad_(False)
