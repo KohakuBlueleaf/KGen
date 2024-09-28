@@ -16,10 +16,14 @@ dependencies = [
     "transformers",
     "huggingface_hub",
     "torch",
-    "orjson",
-    "orjsonl"
 ]
 urls = { "Homepage" = "https://github.com/KohakuBlueleaf/KGen" }
+
+[project.optional-dependencies]
+dev = [
+    "orjson",
+    "orjsonl",
+]
 
 [tool.setuptools]
 package-dir = {"" = "src"}
