@@ -23,7 +23,7 @@ class AestheticRunner(MetricRunner):
         self.preprocessor = preprocessor
 
     @torch.no_grad()
-    def eval(self, images, ref_texts=None, ref_images=None):
+    def eval(self, images, ref_texts=None, is_ref=False):
         pixel_values = (
             self.preprocessor(images=images, return_tensors="pt")
             .pixel_values.to(torch.bfloat16)
@@ -51,4 +51,4 @@ if __name__ == "__main__":
     with open("gbc-aesthetic-v25.jsonl", "w") as f:
         for idx, name in enumerate(["short", "truncate", "tipo gen", "tipo extend"]):
             result = runner.eval_multi(images[idx], batch_size=350)
-            f.write(str(result) + '\n')
+            f.write(str(result) + "\n")

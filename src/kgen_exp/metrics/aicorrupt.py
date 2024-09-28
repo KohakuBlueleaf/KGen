@@ -38,4 +38,4 @@ if __name__ == "__main__":
     with open("coyo-ai-corrupt.jsonl", "w") as f:
         for idx, name in enumerate(["short", "truncate", "tipo gen", "tipo extend"]):
             result = runner.eval_multi(images[idx], batch_size=500)
-            f.write(str(result) + '\n')
+            f.write(str(result) + "\n")

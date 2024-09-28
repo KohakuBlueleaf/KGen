@@ -16,19 +16,23 @@ class CLIPMetricRunner(MetricRunner):
         self.model_id = "zer0int/LongCLIP-GmP-ViT-L-14"
         self.config = CLIPConfig.from_pretrained(model_id)
         self.config.text_config.max_position_embeddings = 248
-        self.clip_model = CLIPModel.from_pretrained(
-            model_id,
-            torch_dtype=dtype,
-            config=self.config,
-            device_map="cuda",
-            attn_implementation="flash_attention_2",
-        ).requires_grad_(False).half()
+        self.clip_model = (
+            CLIPModel.from_pretrained(
+                model_id,
+                torch_dtype=dtype,
+                config=self.config,
+                device_map="cuda",
+                attn_implementation="flash_attention_2",
+            )
+            .requires_grad_(False)
+            .half()
+        )
         self.clip_processor = CLIPProcessor.from_pretrained(
             model_id, padding="max_length", max_length=248
         )
 
     @torch.no_grad()
-    def eval(self, images, ref_texts=None, ref_images=None):
+    def eval(self, images, ref_texts=None, is_ref=False):
         inputs = self.clip_processor(
             text=ref_texts,
             images=images,
@@ -78,7 +82,9 @@ if __name__ == "__main__":
             result2 = data["result2"]
             org_prompt1 = remove_repeated_suffix(org_data["short_caption"].strip())
             org_prompt2 = ".".join(
-                remove_repeated_suffix(org_data["detail_caption"].strip()).split(".")[:2]
+                remove_repeated_suffix(org_data["detail_caption"].strip()).split(".")[
+                    :2
+                ]
             )
             gen_prompt1 = result1["generated"]
             gen_prompt2 = result2["extended"]
