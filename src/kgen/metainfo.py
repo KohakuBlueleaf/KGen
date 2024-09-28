@@ -85,3 +85,47 @@ TARGET_TIPO_NL_MAX = {
     "long": 7,
     "very_long": 12,
 }
+
+TIPO_DEFAULT_FORMAT = {
+    "tag only (DTG mode)": """
+<|special|>, <|characters|>, <|copyrights|>, 
+<|artist|>, 
+
+<|general|>,
+
+<|quality|>, <|meta|>, <|rating|>
+""".strip(),
+    "NL only (Tag to NL)": """<|extended|>.""".strip(),
+    "Both, tag first (recommend)": """
+<|special|>, <|characters|>, <|copyrights|>, 
+<|artist|>, 
+
+<|general|>,
+
+<|extended|>.
+
+<|quality|>, <|meta|>, <|rating|>
+""".strip(),
+    "Both, NL first (recommend)": """
+<|special|>, <|characters|>, <|copyrights|>, 
+<|artist|>, 
+
+<|extended|>.
+
+<|general|>,
+
+<|quality|>, <|meta|>, <|rating|>
+""".strip(),
+    "Both + generated NL": """
+<|special|>, <|characters|>, <|copyrights|>, 
+<|artist|>, 
+
+<|generated|>.
+
+<|general|>,
+
+<|extended|>.
+
+<|quality|>, <|meta|>, <|rating|>
+""".strip(),
+}
