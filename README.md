@@ -40,7 +40,7 @@ The main difference between TIPO and DTG is:
 | Huggingface       | [KBlueLeaf/TIPO-200M · Hugging Face](https://huggingface.co/KBlueLeaf/TIPO-200M) | [KBlueLeaf/TIPO-500M · Hugging Face](https://huggingface.co/KBlueLeaf/TIPO-500M) |
 
 *: We only count "non-padding token" in the token seen, since all the training data have very large length range.`<br/>`
-`: Since the training data is pretty short, it cost more time to reach same token seen than general LLM pretraining.`<br/>`
+`: Since the training data is pretty short, it cost more time to reach same token seen than general LLM pretraining.<br/>``
 As reference, with 4096 as max ctx length and almost all the data have reach that length, you may only need 2days to reach 10B token seen on RTX 3090 x 4 with 200M model.
 
 ### Usage
@@ -49,6 +49,22 @@ A Simple DEMO for TIPO (with t2i functionality included):
 https://huggingface.co/spaces/KBlueLeaf/TIPO-DEMO
 
 TIPO-extension: https://github.com/KohakuBlueleaf/z-tipo-extension
+
+#### Cite
+
+```bibtex
+@techreport{yeh2024tipo,
+  title = {TIPO: Text to Image with text presampling for Prompt Optimization},
+  author = {Yeh, Shih-Ying},
+  year = {2024},
+  month = {9},
+  day = {29},
+  note = {Technical report available at \url{https://hackmd.io/@KBlueLeaf/BJULOQBR0}. 
+          Model available at \url{https://huggingface.co/KBlueLeaf/TIPO-500M}. 
+          Source code available at \url{https://github.com/KohakuBlueleaf/KGen}},
+  type = {Technical Report}
+}
+```
 
 ## DanTagGen
 
