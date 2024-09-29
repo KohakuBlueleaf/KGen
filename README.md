@@ -39,8 +39,8 @@ The main difference between TIPO and DTG is:
 | Training Time     | 420 hour`                                                                      | 100 hour`                                                                      |
 | Huggingface       | [KBlueLeaf/TIPO-200M · Hugging Face](https://huggingface.co/KBlueLeaf/TIPO-200M) | [KBlueLeaf/TIPO-500M · Hugging Face](https://huggingface.co/KBlueLeaf/TIPO-500M) |
 
-*: We only count "non-padding token" in the token seen, since all the training data have very large length range.`<br/>`
-`: Since the training data is pretty short, it cost more time to reach same token seen than general LLM pretraining.<br/>``
+*: We only count "non-padding token" in the token seen, since all the training data have very large length range.<br/>
+`: Since the training data is pretty short, it cost more time to reach same token seen than general LLM pretraining.<br/>
 As reference, with 4096 as max ctx length and almost all the data have reach that length, you may only need 2days to reach 10B token seen on RTX 3090 x 4 with 200M model.
 
 ### Usage
