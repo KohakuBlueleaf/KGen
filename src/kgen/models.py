@@ -36,7 +36,8 @@ model_have_quality_info = {
 }
 
 tipo_model_list = [
-    ("KBlueLeaf/TIPO-200M-dev", ["TIPO-200M-40Btok-F16.gguf"]),
+    ("KBlueLeaf/TIPO-500M", ["TIPO-500M_epoch5-F16.gguf"]),
+    ("KBlueLeaf/TIPO-200M", ["TIPO-200M-40Btok-F16.gguf"]),
 ]
 
 
@@ -84,6 +85,7 @@ def load_model(
     device="cpu",
     subfolder=None,
     tokenizer_name=None,
+    strict=True,
     **kwargs,
 ):
     global text_model, tokenizer, current_model_name
@@ -115,6 +117,8 @@ def load_model(
                 )
             return
         except Exception as e:
+            if strict:
+                raise e
             logger.warning(f"Llama-cpp-python/gguf model {model_name} load failed")
             model_name = f"KBlueLeaf/{model_repo_name}"
     logger.info(f"Using transformers model {model_name}")

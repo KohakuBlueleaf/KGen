@@ -1,4 +1,5 @@
 # KGen - A System for Prompt Generation to Improve Text-to-Image Performance
+
 KGen is a project that utilizes Large Language Models (LLMs) to generate prompts for Text-to-Image (T2I) models.
 
 The goal is to enable T2I models to use more complicated and detailed captions during training while maintaining good usability.
@@ -18,7 +19,7 @@ Read the [Example code](scripts/example.py) or [TIPO-test script](scripts/tipo-t
 
 TIPO: Text to Image with text Presampling for Optimal prompting
 
-TIPO is a project based on the success of DTG project.
+TIPO is a LLM model system designed for generating detailed prompt from input tags or caption. Unlike DTG, TIPO can handle both tags and Natural language. In theory, you can also design your own tag in linguistic way. (For example, long blue hair is acceptable tag in TIPO and will not break the model).
 The main difference between TIPO and DTG is:
 
 1. TIPO is trained with both Natural Language captions and Danbooru tags, the "nl+tags" data are also not only from danbooru but also some general text-image dataset like Coyo-11M
@@ -27,25 +28,27 @@ The main difference between TIPO and DTG is:
 
 ### Model card
 
-|                   | TIPO-200M                                                         | TIPO-500M                           |
-| ----------------- | ----------------------------------------------------------------- | ----------------------------------- |
-| Arch              | LLaMA                                                             | LLaMA                               |
-| Max ctx length    | 1024                                                              | 1024                                |
-| Batch Size        | 2048                                                              | 3584                                |
-| Training dataset  | Danbooru, GBC10M, 5epoch<br />Danbooru, GBC10M, Coyo11M, 3epoch | Danbooru, GBC10M, Coyo11M, 5epoch |
-| Real Token Seen*  | 40B token                                                         | 30B token                           |
-| Training Hardware | RTX 3090 x 4                                                      | H100 x 8                            |
-| Training Time     | 420 hour`                                                         | 100 hour`                           |
+|                   | TIPO-200M                                                                      | TIPO-500M                                                                      |
+| ----------------- | ------------------------------------------------------------------------------ | ------------------------------------------------------------------------------ |
+| Arch              | LLaMA                                                                          | LLaMA                                                                          |
+| Max ctx length    | 1024                                                                           | 1024                                                                           |
+| Batch Size        | 2048                                                                           | 3584                                                                           |
+| Training dataset  | Danbooru, GBC10M, 5epoch<br />Danbooru, GBC10M, Coyo11M, 3epoch              | Danbooru, GBC10M, Coyo11M, 5epoch                                            |
+| Real Token Seen*  | 40B token                                                                      | 30B token                                                                      |
+| Training Hardware | RTX 3090 x 4                                                                   | H100 x 8                                                                       |
+| Training Time     | 420 hour`                                                                      | 100 hour`                                                                      |
+| Huggingface       | [KBlueLeaf/TIPO-200M · Hugging Face](https://huggingface.co/KBlueLeaf/TIPO-200M) | [KBlueLeaf/TIPO-500M · Hugging Face](https://huggingface.co/KBlueLeaf/TIPO-500M) |
 
-*: We only count "non-padding token" in the token seen, since all the training data have very large length range.<br/>
-`: Since the training data is pretty short, it cost more time to reach same token seen than general LLM pretraining.<br/>
+*: We only count "non-padding token" in the token seen, since all the training data have very large length range.`<br/>`
+`: Since the training data is pretty short, it cost more time to reach same token seen than general LLM pretraining.`<br/>`
 As reference, with 4096 as max ctx length and almost all the data have reach that length, you may only need 2days to reach 10B token seen on RTX 3090 x 4 with 200M model.
 
 ### Usage
+
 A Simple DEMO for TIPO (with t2i functionality included):
 https://huggingface.co/spaces/KBlueLeaf/TIPO-DEMO
 
-SD-WebUI extension or ComfyUI node are under developement.
+TIPO-extension: https://github.com/KohakuBlueleaf/z-tipo-extension
 
 ## DanTagGen
 
