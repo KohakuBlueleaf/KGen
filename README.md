@@ -53,7 +53,7 @@ TIPO-extension: https://github.com/KohakuBlueleaf/z-tipo-extension
 #### Cite
 
 ```bibtex
-@techreport{yeh2024tipo,
+@misc{yeh2024tipo,
   title = {TIPO: Text to Image with text presampling for Prompt Optimization},
   author = {Yeh, Shih-Ying},
   year = {2024},
@@ -62,7 +62,6 @@ TIPO-extension: https://github.com/KohakuBlueleaf/z-tipo-extension
   note = {Technical report available at \url{https://hackmd.io/@KBlueLeaf/BJULOQBR0}. 
           Model available at \url{https://huggingface.co/KBlueLeaf/TIPO-500M}. 
           Source code available at \url{https://github.com/KohakuBlueleaf/KGen}},
-  type = {Technical Report}
 }
 ```
 
