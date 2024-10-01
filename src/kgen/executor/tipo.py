@@ -103,6 +103,7 @@ def parse_tipo_request(
     generate_extra_nl_prompt=True,
     tag_first=True,
     tag_length_target="",
+    nl_length_target="",
     add_quality=True,
 ):
     rating = ", ".join(tag_map.get("rating", []))
@@ -125,6 +126,7 @@ def parse_tipo_request(
         quality = ", ".join(tag_map.get("quality", []))
         meta["quality"] = quality
     tag_length = tag_length_target or "long"
+    nl_length = nl_length_target or "long"
 
     # list of [mode, target_output, output_name, length_target, expand]
     # mode with None means tag only
@@ -136,47 +138,47 @@ def parse_tipo_request(
             operations = [
                 [None, tag_length, True],
             ]
-            op_for_nl_gen = ["tag_to_long", tag_length, True]
+            op_for_nl_gen = ["tag_to_long", nl_length, True]
         case (_, "", expand, _):  # tag only
             if expand:
                 operations = [
                     [None, tag_length, True],
                 ]
-            op_for_nl_gen = ["tag_to_long", tag_length, False]
+            op_for_nl_gen = ["tag_to_long", nl_length, False]
         case ("", _, _, expand):  # prompt only
             # long_to_tag -> short_to_tag_to_long
             # expand here means "expand 'long'"
             operations = [
                 ["long_to_tag", tag_length, expand],
             ]
-            op_for_nl_gen = ["short_to_tag_to_long", tag_length, False]
+            op_for_nl_gen = ["short_to_tag_to_long", nl_length, False]
         case (_, _, False, False):
-            op_for_nl_gen = ["short_to_tag_to_long", tag_length, False]
+            op_for_nl_gen = ["short_to_tag_to_long", nl_length, False]
         case (_, _, True, False):
             operations = [
                 ["short_to_tag", tag_length, True],
-                ["short_to_tag_to_long", tag_length, False],
+                ["short_to_tag_to_long", nl_length, False],
             ]
-            op_for_nl_gen = ["short_to_tag_to_long", tag_length, False]
+            op_for_nl_gen = ["short_to_tag_to_long", nl_length, False]
         case (_, _, False, True):
             operations = [
                 ["tag_to_long", tag_length, True],
-                ["tag_to_short_to_long", tag_length, False],
+                ["tag_to_short_to_long", nl_length, False],
             ]
-            op_for_nl_gen = ["tag_to_short_to_long", tag_length, False]
+            op_for_nl_gen = ["tag_to_short_to_long", nl_length, False]
         case (_, _, True, True):
             if tag_first:
                 operations = [
                     ["short_to_tag", tag_length, True],
-                    ["tag_to_long", tag_length, True],
+                    ["tag_to_long", nl_length, True],
                 ]
-                op_for_nl_gen = ["short_to_tag_to_long", tag_length, False]
+                op_for_nl_gen = ["short_to_tag_to_long", nl_length, False]
             else:
                 operations = [
-                    ["tag_to_long", tag_length, True],
+                    ["tag_to_long", nl_length, True],
                     ["long_to_tag", tag_length, True],
                 ]
-                op_for_nl_gen = ["tag_to_short_to_long", tag_length, False]
+                op_for_nl_gen = ["tag_to_short_to_long", nl_length, False]
     if generate_extra_nl_prompt:
         operations.append(op_for_nl_gen)
     return meta, operations, general, nl_prompt
