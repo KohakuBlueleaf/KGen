@@ -40,6 +40,11 @@ POSSIBLE_QUALITY_TAGS = [
     "early",
     "old",
     "score_9",
+    "score_8",
+    "score_7",
+    "score_6",
+    "score_5",
+    "score_4",
     "score_8_up",
     "score_7_up",
     "score_6_up",
@@ -50,7 +55,7 @@ POSSIBLE_QUALITY_TAGS = [
     "source_furry",
     "source_pony",
 ]
-RATING_TAGS = ["safe", "general", "sfw", "sensitive", "nsfw", "explicit"]
+RATING_TAGS = ["safe", "general", "sfw", "sensitive", "nsfw", "explicit", "rating_safe", "rating_questionable", "rating_explicit"]
 
 # minimum length of generated contents
 # unit: tags
