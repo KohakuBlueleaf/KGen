@@ -46,7 +46,7 @@ def generate(
         completion_tokens = result["usage"]["completion_tokens"]
         return prompt + result["choices"][0]["text"], prompt_tokens, completion_tokens
     if "seed" in kwargs:
-        set_seed(kwargs["seed"])
+        set_seed(kwargs["seed"] % 2**32)
 
     torch.cuda.empty_cache()
     inputs = tokenizer(prompt, return_tensors="pt")
