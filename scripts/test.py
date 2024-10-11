@@ -2,6 +2,7 @@ import re
 import random
 from time import time
 from typing import Callable
+import heapq as hq
 
 import torch
 import torch.nn as nn
@@ -68,24 +69,21 @@ mode, length, expand = operations[0]
 prompt = tipo.apply_tipo_prompt(meta, general, prompt, mode, length, expand)
 
 models.load_model(
-    "KBlueLeaf/TIPO-200M",
+    "KBlueLeaf/TIPO-500M",
     device="cuda",
 )
+print(models.text_model.main_input_name)
 
 splitters = [
-    lambda x, i: x[i:].split("tags")[-1].split("long:")[0].split("short:")[0].count(",") > 4
+    lambda x, i: x[i:].split("tags")[-1].split("long:")[0].split("short:")[0].count(",")
+    > 6
 ]
-
-inputs = models.tokenizer(prompt, return_tensors="pt")
-input_ids = inputs["input_ids"].to(next(models.text_model.parameters()).device)
-input_length = input_ids.shape[-1]
 generation_config = GenerationConfig(
     min_new_tokens=4,
     return_dict_in_generate=True,
     output_scores=True,
     do_sample=True,
 )
-
 
 processors = LogitsProcessorList()
 recorder = LogitsRecorder()
@@ -95,10 +93,18 @@ stop_criteria = StoppingCriteriaList()
 splitter = NodeSplitter(splitters, input_length=len(prompt))
 stop_criteria.append(splitter)
 
-all_result = []
-for idx in range(3):
+
+def get_next(prompt, input_ids=None, key_values=None):
     recorder.clean()
-    splitter.clean()
+    splitter.clean(len(prompt))
+
+    if input_ids is None:
+        inputs = models.tokenizer(prompt, return_tensors="pt")
+        input_ids = inputs["input_ids"].to(next(models.text_model.parameters()).device)
+    input_length = input_ids.shape[-1]
+    extra_kwargs = {}
+    if key_values is not None:
+        extra_kwargs["past_key_values"] = key_values
     with torch.no_grad():
         generation_output = models.text_model.generate(
             input_ids=input_ids,
@@ -106,23 +112,80 @@ for idx in range(3):
             max_new_tokens=1024,
             logits_processor=processors,
             stopping_criteria=stop_criteria,
+            **extra_kwargs,
         )
 
-    output_sequence = generation_output.sequences[0][input_length:]
+    output_sequence = generation_output.sequences
     scores = recorder.scores
-    total_score = 0
-    for i, (score, choosed) in enumerate(zip(scores[:-1], output_sequence[:-1])):
+    total_score = 1
+    total = 0
+    for i, (score, choosed) in enumerate(
+        zip(scores[:-1], output_sequence[0][input_length:])
+    ):
+        if choosed == output_sequence[0][-1]:
+            continue
         score = torch.softmax(score, dim=-1)[0]
-        total_score += score[choosed]
+        total_score *= score[choosed]
+        total += 1
 
-    avg_score = total_score / len(output_sequence)
-    all_result.append([avg_score, output_sequence, idx])
+    avg_score = total_score / total
+    # print(avg_score)
+    return (
+        output_sequence,
+        generation_output.past_key_values,
+        models.tokenizer.decode(output_sequence[0]),
+        avg_score,
+    )
 
 
-for result in sorted(all_result, key=lambda x: x[0], reverse=True):
-    score, output_sequence, idx = result
-    decode = models.tokenizer.decode(output_sequence)
-    print(f"{idx:04}: {score}")
+def get_variants(prompt, target_variants=5):
+    queue = [(0, 0, prompt, None, None)]
+    results = []
+    total_forward = 0
+    while len(results) < target_variants:
+        if len(queue) == 0:
+            break
+        score, level, prompt, input_ids, key_values = hq.heappop(queue)
+        print(score, level)
+        next_level = level - 1
+        score = score * level / next_level
+        for _ in range(max(2, 4+level)):
+            output_sequence, past_key_values, decode, next_score = get_next(
+                prompt, input_ids, key_values
+            )
+            total_forward += 1
+            if output_sequence[0][-1] == models.tokenizer.eos_token_id:
+                results.append(
+                    (
+                        score + next_score / next_level,
+                        # score - next_score,
+                        next_level,
+                        decode,
+                    )
+                )
+                continue
+            next_q = (
+                score + next_score / next_level,
+                # score - next_score,
+                next_level,
+                decode,
+                output_sequence,
+                past_key_values,
+            )
+            hq.heappush(queue, next_q)
+    print(total_forward)
+    return results
+
+
+results = (
+    get_variants(prompt, target_variants=7)
+    # + get_variants(prompt, target_variants=3)
+    # + get_variants(prompt, target_variants=3)
+)
+
+
+for score, level, result in sorted(results, key=lambda x: x[0] / x[1], reverse=False):
+    print(f"{score/level}")
     print("-" * 20)
-    print(f"{prompt}{decode}")
+    print(f"{result}")
     print("=" * 50)
