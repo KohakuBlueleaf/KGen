@@ -76,7 +76,9 @@ print(models.text_model.main_input_name)
 
 splitters = [
     lambda x, i: x[i:].split("tags")[-1].split("long:")[0].split("short:")[0].count(",")
+### MOD HERE ###
     > 6
+### END MOD HERE ###
 ]
 generation_config = GenerationConfig(
     min_new_tokens=4,
@@ -114,8 +116,9 @@ def get_next(prompt, input_ids=None, key_values=None):
             stopping_criteria=stop_criteria,
             **extra_kwargs,
         )
-
     output_sequence = generation_output.sequences
+
+### MOD HERE ###
     scores = recorder.scores
     total_score = 1
     total = 0
@@ -130,6 +133,8 @@ def get_next(prompt, input_ids=None, key_values=None):
 
     avg_score = total_score / total
     # print(avg_score)
+### END MOD HERE ###
+    
     return (
         output_sequence,
         generation_output.past_key_values,
@@ -137,7 +142,7 @@ def get_next(prompt, input_ids=None, key_values=None):
         avg_score,
     )
 
-
+### MOD HERE ###
 def get_variants(prompt, target_variants=5):
     queue = [(0, 0, prompt, None, None)]
     results = []
@@ -175,7 +180,7 @@ def get_variants(prompt, target_variants=5):
             hq.heappush(queue, next_q)
     print(total_forward)
     return results
-
+### END MOD HERE ###
 
 results = (
     get_variants(prompt, target_variants=7)
