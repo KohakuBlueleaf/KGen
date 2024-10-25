@@ -143,7 +143,7 @@ def get_next(prompt, input_ids=None, key_values=None):
     )
 
 ### MOD HERE ###
-def get_variants(prompt, target_variants=5):
+def get_variants_ref(prompt, target_variants=5):
     queue = [(0, 0, prompt, None, None)]
     results = []
     total_forward = 0
@@ -180,6 +180,135 @@ def get_variants(prompt, target_variants=5):
             hq.heappush(queue, next_q)
     print(total_forward)
     return results
+    
+import math
+import random
+
+class MCTSNode:
+    def __init__(self, prompt, input_ids=None, key_values=None, parent=None):
+        self.prompt = prompt
+        self.input_ids = input_ids
+        self.key_values = key_values
+        self.parent = parent
+        self.children = []
+        
+        self.score = 0
+        self.visits = 0
+        self.is_terminal = False
+        
+    def uct1(self, exploration_weight=1.414):
+        if self.visits == 0:
+            return float("inf")
+        return self.score / self.visits + exploration_weight * math.sqrt( math.log(self.parent.visits) / self.visits )
+        
+def get_variants(prompt, target_variants=5, max_iterations=100):
+    def select(node, explore_chance=0.2):
+        while node.children and not node.is_terminal:
+            if random.random() < explore_chance:
+                node = random.choice(node.children)
+            else:
+                node = max(node.children, key=lambda x: x.uct1())
+        return node
+        
+    def expand(node):
+        curr_nodes = [node]
+        depth = 0
+        max_depth = 3
+        
+        while depth < max_depth and curr_nodes:
+            next_nodes = []
+            for curr_node in curr_nodes:
+                if curr_node.is_terminal:
+                    continue
+                    
+                for _ in range(4):
+                    output_sequence, past_key_values, decode, next_score = get_next(
+                        curr_node.prompt, curr_node.input_ids, curr_node.key_values
+                    )
+                    
+                    is_terminal = output_sequence[0][-1] == models.tokenizer.eos_token_id
+                    
+                    child = MCTSNode(
+                        prompt=decode,
+                        input_ids=output_sequence,
+                        key_values=past_key_values,
+                        parent=curr_node
+                    )
+                    child.is_terminal = is_terminal
+                    child.score = next_score
+                    
+                    curr_node.children.append(child)
+                    next_nodes.append(child)
+            
+            curr_nodes = next_nodes
+            depth += 1
+        
+        if curr_nodes:
+            return random.choice(curr_nodes)
+        else:
+            return random.choice(node.children)
+        
+    def simulate(node):
+        if node.is_terminal:
+            return node.score
+            
+        curr_prompt = node.prompt
+        curr_ids = node.input_ids
+        curr_key_values = node.key_values
+        total_score = node.score
+        
+        depth = 0
+        while True:
+            output_sequence, past_key_values, decode, next_score = get_next(
+                curr_prompt, curr_ids, curr_key_values
+            )
+            
+            total_score += next_score
+            depth += 1
+            
+            if output_sequence[0][-1] == models.tokenizer.eos_token_id:
+                break
+            
+            curr_prompt = decode
+            curr_ids = output_sequence
+            curr_key_values = past_key_values
+            
+        return total_score / (depth + 1)
+        
+    def backprop(node, score):
+        while node:
+            node.visits += 1
+            node.score += score
+            node = node.parent
+    
+    results = []
+    root = MCTSNode(prompt)
+    
+    for _ in range(max_iterations):
+        if _ % 10 == 0:
+            print(f'{_:3d} - results: {len(results)}')
+        
+        # selection
+        curr_node = select(root)
+        
+        # expansion
+        if curr_node.visits > 0 and not curr_node.is_terminal:
+            curr_node = expand(curr_node)
+        
+        # simulation
+        score = simulate(curr_node)
+        
+        # backpropagation
+        backprop(curr_node, score)
+        
+        if len(results) < target_variants and curr_node.is_terminal:
+            results.append((curr_node.score, curr_node.visits, curr_node.prompt))
+        
+        if len(results) == target_variants:
+            break
+    
+    return results
+        
 ### END MOD HERE ###
 
 results = (
@@ -187,7 +316,6 @@ results = (
     # + get_variants(prompt, target_variants=3)
     # + get_variants(prompt, target_variants=3)
 )
-
 
 for score, level, result in sorted(results, key=lambda x: x[0] / x[1], reverse=False):
     print(f"{score/level}")
