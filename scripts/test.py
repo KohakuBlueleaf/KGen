@@ -143,55 +143,20 @@ def get_next(prompt, input_ids=None, key_values=None):
     )
 
 ### MOD HERE ###
-def get_variants_ref(prompt, target_variants=5):
-    queue = [(0, 0, prompt, None, None)]
-    results = []
-    total_forward = 0
-    while len(results) < target_variants:
-        if len(queue) == 0:
-            break
-        score, level, prompt, input_ids, key_values = hq.heappop(queue)
-        print(score, level)
-        next_level = level - 1
-        score = score * level / next_level
-        for _ in range(max(2, 4+level)):
-            output_sequence, past_key_values, decode, next_score = get_next(
-                prompt, input_ids, key_values
-            )
-            total_forward += 1
-            if output_sequence[0][-1] == models.tokenizer.eos_token_id:
-                results.append(
-                    (
-                        score + next_score / next_level,
-                        # score - next_score,
-                        next_level,
-                        decode,
-                    )
-                )
-                continue
-            next_q = (
-                score + next_score / next_level,
-                # score - next_score,
-                next_level,
-                decode,
-                output_sequence,
-                past_key_values,
-            )
-            hq.heappush(queue, next_q)
-    print(total_forward)
-    return results
-    
 import math
-import random
+
+total_forwards = 0 #DEBUG
 
 class MCTSNode:
-    def __init__(self, prompt, input_ids=None, key_values=None, parent=None):
+    def __init__(self, prompt, input_ids=None, key_values=None, parent=None, depth=0):
         self.prompt = prompt
         self.input_ids = input_ids
         self.key_values = key_values
         self.parent = parent
         self.children = []
+        self.depth = depth # for controlling tree width
         
+        self.active = False # for caching
         self.score = 0
         self.visits = 0
         self.is_terminal = False
@@ -199,116 +164,138 @@ class MCTSNode:
     def uct1(self, exploration_weight=1.414):
         if self.visits == 0:
             return float("inf")
-        return self.score / self.visits + exploration_weight * math.sqrt( math.log(self.parent.visits) / self.visits )
+        return self.score + exploration_weight * math.sqrt( math.log(self.parent.visits) / self.visits )
+
+def get_variants(prompt, target_variants):
+    def best_child(node) -> MCTSNode:
+        """
+        greedy search for leaf node with max uct1
+        stop until no children or active children
+        """
+        while node.children and any(child.active for child in node.children):
+            node = max(
+                [c for c in node.children if c.active],
+                key=lambda c: c.uct1(),
+            )
         
-def get_variants(prompt, target_variants=5, max_iterations=100):
-    def select(node, explore_chance=0.2):
-        while node.children and not node.is_terminal:
-            if random.random() < explore_chance:
-                node = random.choice(node.children)
-            else:
-                node = max(node.children, key=lambda x: x.uct1())
         return node
-        
-    def expand(node):
-        curr_nodes = [node]
-        depth = 0
-        max_depth = 3
-        
-        while depth < max_depth and curr_nodes:
-            next_nodes = []
-            for curr_node in curr_nodes:
-                if curr_node.is_terminal:
-                    continue
-                    
-                for _ in range(4):
-                    output_sequence, past_key_values, decode, next_score = get_next(
-                        curr_node.prompt, curr_node.input_ids, curr_node.key_values
-                    )
-                    
-                    is_terminal = output_sequence[0][-1] == models.tokenizer.eos_token_id
-                    
-                    child = MCTSNode(
-                        prompt=decode,
-                        input_ids=output_sequence,
-                        key_values=past_key_values,
-                        parent=curr_node
-                    )
-                    child.is_terminal = is_terminal
-                    child.score = next_score
-                    
-                    curr_node.children.append(child)
-                    next_nodes.append(child)
             
-            curr_nodes = next_nodes
-            depth += 1
+    def rollout(node, max_explore_depth=2) -> float:
+        """
+        simulate until max_explorate_depth or reaching terminal
+        then return deepest node score
+        nodes are created along simulation path but remain inactive until expansion
+        max_explore_depth relative to node.depth
+        """
+        current_node = node
+        current_depth = 0
         
-        if curr_nodes:
-            return random.choice(curr_nodes)
-        else:
-            return random.choice(node.children)
-        
-    def simulate(node):
-        if node.is_terminal:
-            return node.score
+        while current_depth < max_explore_depth:
+            #DEBUG
+            global total_forwards
+            total_forwards += 1
             
-        curr_prompt = node.prompt
-        curr_ids = node.input_ids
-        curr_key_values = node.key_values
-        total_score = node.score
-        
-        depth = 0
-        while True:
-            output_sequence, past_key_values, decode, next_score = get_next(
-                curr_prompt, curr_ids, curr_key_values
+            output_sequence, past_key_values, decoded, score = get_next(
+                current_node.prompt,
+                current_node.input_ids,
+                current_node.key_values,
             )
             
-            total_score += next_score
-            depth += 1
+            is_terminal = output_sequence[0][-1] == models.tokenizer.eos_token_id
             
-            if output_sequence[0][-1] == models.tokenizer.eos_token_id:
+            child = MCTSNode(
+                prompt=decoded,
+                input_ids=output_sequence,
+                key_values=past_key_values,
+                parent=current_node,
+                depth=current_node.depth + 1,
+            )
+            child.score = score
+            child.is_terminal = is_terminal
+            current_node.children.append(child)
+            
+            if is_terminal:
+                print(f"terminal at depth {current_depth} - signature: {output_sequence[0][-2]}")
                 break
+            else:
+                current_node = child
+                current_depth += 1
+                
+        return current_node.score
             
-            curr_prompt = decode
-            curr_ids = output_sequence
-            curr_key_values = past_key_values
             
-        return total_score / (depth + 1)
-        
-    def backprop(node, score):
-        while node:
+    def expand(node) -> None:
+        """
+        convert inactive children to active for current node if any exist
+        create childrens for visited nodes
+        until node has max(2, 4-node.depth) children
+        """
+    
+        num_children = max(2, 4 - node.depth)
+        while len(node.children) < num_children:
+            #DEBUG
+            global total_forwards
+            total_forwards += 1
+            
+            output_sequence, past_key_values, decoded, score = get_next(
+                node.prompt,
+                node.input_ids,
+                node.key_values,
+            )
+            
+            child = MCTSNode(
+                prompt=decoded,
+                input_ids=output_sequence,
+                key_values=past_key_values,
+                parent=node,
+                depth=node.depth + 1,
+            )
+            child.score = score
+            child.is_terminal = output_sequence[0][-1] == models.tokenizer.eos_token_id
+            node.children.append(child)
+            
+        for c in node.children:
+            c.active = True
+    
+    def backpropagate(node, score) -> None:
+        """
+        update from rollout node upward to root
+        """
+        while node is not None:
             node.visits += 1
             node.score += score
             node = node.parent
     
     results = []
+    
     root = MCTSNode(prompt)
+    root.active = True
     
-    for _ in range(max_iterations):
-        if _ % 10 == 0:
-            print(f'{_:3d} - results: {len(results)}')
+    #DEBUG
+    iter = 0
+    while len(results) < target_variants:
+        if iter % 10 == 0:
+            print(f"iter: {iter} - results: {len(results)}")
         
-        # selection
-        curr_node = select(root)
+        # select max uct1
+        node = best_child(root)
+        print(f"selected: {node.depth} - signature: {node.input_ids[0][-2] if node.input_ids is not None else None}") #DEBUG
         
-        # expansion
-        if curr_node.visits > 0 and not curr_node.is_terminal:
-            curr_node = expand(curr_node)
-        
-        # simulation
-        score = simulate(curr_node)
-        
-        # backpropagation
-        backprop(curr_node, score)
-        
-        if len(results) < target_variants and curr_node.is_terminal:
-            results.append((curr_node.score, curr_node.visits, curr_node.prompt))
-        
-        if len(results) == target_variants:
-            break
+        if not node.is_terminal:
+            # if node unvisited: rollout and backprop
+            # otherwise expand only
+            if node.visits == 0:
+                iter += 1
+                score = rollout(node)
+                backpropagate(node, score)
+            else:
+                expand(node)
+        else:
+            results.append((node.score, node.depth, node.prompt))
     
+    print(f'fowards: {total_forwards}')
     return results
-        
+
 ### END MOD HERE ###
 
 results = (
