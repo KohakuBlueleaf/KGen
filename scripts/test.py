@@ -160,11 +160,13 @@ class MCTSNode:
         self.score = 0
         self.visits = 0
         self.is_terminal = False
+        self.terminal_rank = 0 # for next best
         
     def uct1(self, exploration_weight=1.414):
         if self.visits == 0:
             return float("inf")
-        return self.score + exploration_weight * math.sqrt( math.log(self.parent.visits) / self.visits )
+        penalty = self.terminal_rank * 0.5 if self.is_terminal else 0
+        return self.score - penalty + exploration_weight * math.sqrt( math.log(self.parent.visits) / self.visits )
 
 def get_variants(prompt, target_variants):
     def best_child(node) -> MCTSNode:
@@ -173,14 +175,16 @@ def get_variants(prompt, target_variants):
         stop until no children or active children
         """
         while node.children and any(child.active for child in node.children):
-            node = max(
-                [c for c in node.children if c.active],
-                key=lambda c: c.uct1(),
-            )
+            active_children = [c for c in node.children if c.active]
+            active_children = [c for c in active_children if not (c.is_terminal and c.terminal_rank > 0)]
+        
+            if not active_children:
+                break
+            node = max(active_children, key=lambda c: c.uct1())
         
         return node
             
-    def rollout(node, max_explore_depth=2) -> float:
+    def rollout(node, max_explore_depth=3) -> float:
         """
         simulate until max_explorate_depth or reaching terminal
         then return deepest node score
@@ -215,7 +219,9 @@ def get_variants(prompt, target_variants):
             current_node.children.append(child)
             
             if is_terminal:
-                print(f"terminal at depth {current_depth} - signature: {output_sequence[0][-2]}")
+                print('terminal reached')
+                results.append((child.score, child.depth, child.prompt))
+                child.terminal_rank = len(results)
                 break
             else:
                 current_node = child
@@ -252,6 +258,9 @@ def get_variants(prompt, target_variants):
             )
             child.score = score
             child.is_terminal = output_sequence[0][-1] == models.tokenizer.eos_token_id
+            if child.is_terminal:
+                results.append((child.score, child.depth, child.prompt))
+                child.terminal_rank = len(results)
             node.children.append(child)
             
         for c in node.children:
@@ -274,17 +283,15 @@ def get_variants(prompt, target_variants):
     #DEBUG
     iter = 0
     while len(results) < target_variants:
-        if iter % 10 == 0:
-            print(f"iter: {iter} - results: {len(results)}")
-        
         # select max uct1
         node = best_child(root)
-        print(f"selected: {node.depth} - signature: {node.input_ids[0][-2] if node.input_ids is not None else None}") #DEBUG
         
         if not node.is_terminal:
             # if node unvisited: rollout and backprop
             # otherwise expand only
             if node.visits == 0:
+                if iter % 10 == 0:
+                    print(f"iter: {iter} - results: {len(results)}")
                 iter += 1
                 score = rollout(node)
                 backpropagate(node, score)
