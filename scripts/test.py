@@ -120,18 +120,21 @@ def get_next(prompt, input_ids=None, key_values=None):
 
 ### MOD HERE ###
     scores = recorder.scores
-    total_score = 1
-    total = 0
+    log_total_score = 0
+    depth_weight = 0.8 # deeper better
+    
     for i, (score, choosed) in enumerate(
         zip(scores[:-1], output_sequence[0][input_length:])
     ):
         if choosed == output_sequence[0][-1]:
             continue
         score = torch.softmax(score, dim=-1)[0]
-        total_score *= score[choosed]
-        total += 1
+        token_log_prob = torch.log(score[choosed]).item()
+        weight = depth_weight ** (len(scores) - i - 1)
+        log_total_score += token_log_prob * weight
 
-    avg_score = total_score / total
+    avg_log_score = log_total_score / len(scores) if scores else 0
+    avg_score = math.exp(min(avg_log_score, 0))
     # print(avg_score)
 ### END MOD HERE ###
     
@@ -143,6 +146,10 @@ def get_next(prompt, input_ids=None, key_values=None):
     )
 
 ### MOD HERE ###
+# TODO: 
+# - gets stuck easily
+# - (current impl) does not perform better than beam search consistently necessarily
+
 import math
 
 total_forwards = 0 #DEBUG
@@ -162,12 +169,12 @@ class MCTSNode:
         self.is_terminal = False
         self.terminal_rank = 0 # for next best
         
-    def uct1(self, exploration_weight=1.414):
+    def uct1(self, exploration_weight=2):
         if self.visits == 0:
             return float("inf")
         penalty = self.terminal_rank * 0.5 if self.is_terminal else 0
         return self.score - penalty + exploration_weight * math.sqrt( math.log(self.parent.visits) / self.visits )
-
+        
 def get_variants(prompt, target_variants):
     def best_child(node) -> MCTSNode:
         """
@@ -178,13 +185,22 @@ def get_variants(prompt, target_variants):
             active_children = [c for c in node.children if c.active]
             active_children = [c for c in active_children if not (c.is_terminal and c.terminal_rank > 0)]
         
+            if not active_children and node.parent:
+                parent = node.parent
+                parent.children.remove(node)
+                del node
+                print(f'dead end, create new children') #DEBUG
+                return best_child(parent)
+                
             if not active_children:
                 break
+            
             node = max(active_children, key=lambda c: c.uct1())
         
         return node
             
-    def rollout(node, max_explore_depth=3) -> float:
+    # NOTE: limit max_explore_depth to utilize mcts property
+    def rollout(node, max_explore_depth=2) -> float:
         """
         simulate until max_explorate_depth or reaching terminal
         then return deepest node score
@@ -219,7 +235,7 @@ def get_variants(prompt, target_variants):
             current_node.children.append(child)
             
             if is_terminal:
-                print('terminal reached')
+                print(f'rollout: terminal reached at {child.depth}') #DEBUG
                 results.append((child.score, child.depth, child.prompt))
                 child.terminal_rank = len(results)
                 break
@@ -259,6 +275,7 @@ def get_variants(prompt, target_variants):
             child.score = score
             child.is_terminal = output_sequence[0][-1] == models.tokenizer.eos_token_id
             if child.is_terminal:
+                print(f'expand: terminal reached at {child.depth}') #DEBUG
                 results.append((child.score, child.depth, child.prompt))
                 child.terminal_rank = len(results)
             node.children.append(child)
@@ -286,12 +303,14 @@ def get_variants(prompt, target_variants):
         # select max uct1
         node = best_child(root)
         
+        # print(f'selected node: {node.depth}, {node.input_ids[0][-2] if node.input_ids is not None else None}') #DEBUG
+        
         if not node.is_terminal:
             # if node unvisited: rollout and backprop
             # otherwise expand only
             if node.visits == 0:
                 if iter % 10 == 0:
-                    print(f"iter: {iter} - results: {len(results)}")
+                    print(f"iter: {iter} - results: {len(results)}") #DEBUG
                 iter += 1
                 score = rollout(node)
                 backpropagate(node, score)
