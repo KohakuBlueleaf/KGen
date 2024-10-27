@@ -146,10 +146,6 @@ def get_next(prompt, input_ids=None, key_values=None):
     )
 
 ### MOD HERE ###
-# TODO: 
-# - gets stuck easily
-# - (current impl) does not perform better than beam search consistently necessarily
-
 import math
 
 total_forwards = 0 #DEBUG
@@ -172,9 +168,11 @@ class MCTSNode:
     def uct1(self, exploration_weight=3):
         if self.visits == 0:
             return float("inf")
-        penalty =  0.5 **  (2 - self.visits) if self.is_terminal else 0
-        return self.score - penalty + exploration_weight * math.sqrt( math.log(self.parent.visits) / self.visits )
+        # penalty =  0.5 **  (2 - self.visits) if self.is_terminal else 0
+        # return self.score - penalty + exploration_weight * math.sqrt( math.log(self.parent.visits) / self.visits )
+        return self.score + exploration_weight * math.sqrt( math.log(self.parent.visits) / self.visits )
         
+blunders = 0 # awful practice we're gonna need an object for this
 def get_variants(prompt, target_variants):
     def best_child(node) -> MCTSNode:
         """
@@ -200,13 +198,16 @@ def get_variants(prompt, target_variants):
         return node
             
     def write_results(node, src):
+        global blunders
+        
         print(f'{src}: terminal reached at {node.depth}')
         if node.score / node.depth < 0.15:
+            blunders += 1
             print(f'but skipped due to low score: {node.score / node.depth}')
         else:
             results.append((node.score, node.depth, node.prompt))
             node.terminal_rank = len(results)
-        backpropagate(node, -node.score)
+        backpropagate(node, node.score * (1 - 0.1 * blunders))
         return
         
             
