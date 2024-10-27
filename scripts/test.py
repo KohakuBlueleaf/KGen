@@ -169,10 +169,10 @@ class MCTSNode:
         self.is_terminal = False
         self.terminal_rank = 0 # for next best
         
-    def uct1(self, exploration_weight=2):
+    def uct1(self, exploration_weight=3):
         if self.visits == 0:
             return float("inf")
-        penalty = self.terminal_rank * 0.5 if self.is_terminal else 0
+        penalty =  0.5 **  (2 - self.visits) if self.is_terminal else 0
         return self.score - penalty + exploration_weight * math.sqrt( math.log(self.parent.visits) / self.visits )
         
 def get_variants(prompt, target_variants):
@@ -198,6 +198,17 @@ def get_variants(prompt, target_variants):
             node = max(active_children, key=lambda c: c.uct1())
         
         return node
+            
+    def write_results(node, src):
+        print(f'{src}: terminal reached at {node.depth}')
+        if node.score / node.depth < 0.15:
+            print(f'but skipped due to low score: {node.score / node.depth}')
+        else:
+            results.append((node.score, node.depth, node.prompt))
+            node.terminal_rank = len(results)
+        backpropagate(node, -node.score)
+        return
+        
             
     # NOTE: limit max_explore_depth to utilize mcts property
     def rollout(node, max_explore_depth=2) -> float:
@@ -235,9 +246,7 @@ def get_variants(prompt, target_variants):
             current_node.children.append(child)
             
             if is_terminal:
-                print(f'rollout: terminal reached at {child.depth}') #DEBUG
-                results.append((child.score, child.depth, child.prompt))
-                child.terminal_rank = len(results)
+                write_results(child, 'rollout')
                 break
             else:
                 current_node = child
@@ -275,9 +284,7 @@ def get_variants(prompt, target_variants):
             child.score = score
             child.is_terminal = output_sequence[0][-1] == models.tokenizer.eos_token_id
             if child.is_terminal:
-                print(f'expand: terminal reached at {child.depth}') #DEBUG
-                results.append((child.score, child.depth, child.prompt))
-                child.terminal_rank = len(results)
+                write_results(child, 'expand')
             node.children.append(child)
             
         for c in node.children:
@@ -317,7 +324,7 @@ def get_variants(prompt, target_variants):
             else:
                 expand(node)
         else:
-            results.append((node.score, node.depth, node.prompt))
+            write_results(node, 'search')
     
     print(f'fowards: {total_forwards}')
     return results
