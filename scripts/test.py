@@ -77,7 +77,7 @@ print(models.text_model.main_input_name)
 splitters = [
     lambda x, i: x[i:].split("tags")[-1].split("long:")[0].split("short:")[0].count(",")
 ### MOD HERE ###
-    > 6
+    > 4
 ### END MOD HERE ###
 ]
 generation_config = GenerationConfig(
@@ -201,12 +201,12 @@ def get_variants(prompt, target_variants):
         global blunders
         
         print(f'{src}: terminal reached at {node.depth}')
-        if node.score / node.depth < 0.15:
-            blunders += 1
-            print(f'but skipped due to low score: {node.score / node.depth}')
-        else:
-            results.append((node.score, node.depth, node.prompt))
-            node.terminal_rank = len(results)
+        # if node.score / node.depth < 0.15:
+            # blunders += 1
+            # print(f'but skipped due to low score: {node.score / node.depth}')
+        # else:
+        results.append((node.score, node.depth, node.prompt))
+        node.terminal_rank = len(results)
         backpropagate(node, node.score * (1 - 0.1 * blunders))
         return
         
@@ -223,6 +223,7 @@ def get_variants(prompt, target_variants):
         current_depth = 0
         
         while current_depth < max_explore_depth:
+        # while True:
             #DEBUG
             global total_forwards
             total_forwards += 1
