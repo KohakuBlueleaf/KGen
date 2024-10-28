@@ -19,6 +19,8 @@ Read the [Example code](scripts/example.py) or [TIPO-test script](scripts/tipo-t
 
 TIPO: Text to Image with text Presampling for Optimal prompting
 
+[Technical Report](https://kblueleaf.net/document/TIPO-tech-report.pdf)
+
 TIPO is a LLM model system designed for generating detailed prompt from input tags or caption. Unlike DTG, TIPO can handle both tags and Natural language. In theory, you can also design your own tag in linguistic way. (For example, long blue hair is acceptable tag in TIPO and will not break the model).
 The main difference between TIPO and DTG is:
 
@@ -28,19 +30,19 @@ The main difference between TIPO and DTG is:
 
 ### Model card
 
-|                   | TIPO-200M                                                                      | TIPO-500M                                                                      |
-| ----------------- | ------------------------------------------------------------------------------ | ------------------------------------------------------------------------------ |
-| Arch              | LLaMA                                                                          | LLaMA                                                                          |
-| Max ctx length    | 1024                                                                           | 1024                                                                           |
-| Batch Size        | 2048                                                                           | 3584                                                                           |
-| Training dataset  | Danbooru, GBC10M, 5epoch<br />Danbooru, GBC10M, Coyo11M, 3epoch              | Danbooru, GBC10M, Coyo11M, 5epoch                                            |
-| Real Token Seen*  | 40B token                                                                      | 30B token                                                                      |
-| Training Hardware | RTX 3090 x 4                                                                   | H100 x 8                                                                       |
-| Training Time     | 420 hour`                                                                      | 100 hour`                                                                      |
-| Huggingface       | [KBlueLeaf/TIPO-200M · Hugging Face](https://huggingface.co/KBlueLeaf/TIPO-200M) | [KBlueLeaf/TIPO-500M · Hugging Face](https://huggingface.co/KBlueLeaf/TIPO-500M) |
+|                   | TIPO-200M                                                                      | TIPO-200M-ft                                                                         | TIPO-500M                                                                      |
+| ----------------- | ------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------ |
+| Arch              | LLaMA                                                                          | LLaMA                                                                                | LLaMA                                                                          |
+| Max ctx length    | 1024                                                                           | 1024                                                                                 | 1024                                                                           |
+| Batch Size        | 2048                                                                           | 2048                                                                                 | 3584                                                                           |
+| Training dataset  | Danbooru, GBC10M, 5epoch<br />Danbooru, GBC10M, Coyo11M, 3epoch              | Danbooru(pixtral), Coyo11M, 2epoch                                                   | Danbooru, GBC10M, Coyo11M, 5epoch                                            |
+| Real Token Seen*  | 40B token                                                                      | 50B (10B more from TIPO-200M)                                                       | 30B token                                                                      |
+| Training Hardware | RTX 3090 x 4                                                                   | RTX 3090 x 4                                                                         | H100 x 8                                                                       |
+| Training Time     | 420 hour`                                                                      | 120 hour`                                                                            | 100 hour`                                                                      |
+| Huggingface       | [KBlueLeaf/TIPO-200M · Hugging Face](https://huggingface.co/KBlueLeaf/TIPO-200M) | [KBlueLeaf/TIPO-200M-ft · Hugging Face](https://huggingface.co/KBlueLeaf/TIPO-200M-ft) | [KBlueLeaf/TIPO-500M · Hugging Face](https://huggingface.co/KBlueLeaf/TIPO-500M) |
 
-*: We only count "non-padding token" in the token seen, since all the training data have very large length range.<br/>
-`: Since the training data is pretty short, it cost more time to reach same token seen than general LLM pretraining.<br/>
+*: We only count "non-padding token" in the token seen, since all the training data have very large length range.`<br/>`
+`: Since the training data is pretty short, it cost more time to reach same token seen than general LLM pretraining.`<br/>`
 As reference, with 4096 as max ctx length and almost all the data have reach that length, you may only need 2days to reach 10B token seen on RTX 3090 x 4 with 200M model.
 
 ### Usage
@@ -59,8 +61,8 @@ TIPO-extension: https://github.com/KohakuBlueleaf/z-tipo-extension
   year = {2024},
   month = {9},
   day = {29},
-  note = {Technical report available at \url{https://hackmd.io/@KBlueLeaf/BJULOQBR0}. 
-          Model available at \url{https://huggingface.co/KBlueLeaf/TIPO-500M}. 
+  note = {Technical report available at \url{https://kblueleaf.net/document/TIPO-tech-report.pdf}. 
+          Model available at \url{https://huggingface.co/KBlueLeaf/TIPO-200M-ft}. 
           Source code available at \url{https://github.com/KohakuBlueleaf/KGen}},
 }
 ```
