@@ -1,9 +1,10 @@
-from concurrent.futures import ProcessPoolExecutor
+from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor
 from PIL import Image
 from tqdm import tqdm, trange
 
 
-pool = ProcessPoolExecutor(max_workers=16)
+pool = ProcessPoolExecutor(max_workers=24)
+# pool = ThreadPoolExecutor(max_workers=64)
 
 
 def load(image):
@@ -36,7 +37,9 @@ class MetricRunner:
 
     def eval_multi(self, images, ref_texts=None, ref_images=None, batch_size=32):
         if ref_texts is None:
-            ref_texts = [None] * max(len(images), len(ref_images))
+            ref_texts = [None] * max(
+                len(images), 0 if ref_images is None else len(ref_images)
+            )
         results = []
         ref_results = []
         for i in trange(0, len(images), batch_size):

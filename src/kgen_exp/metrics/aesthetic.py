@@ -2,9 +2,9 @@ import os
 import torch
 import orjsonl
 import orjson
-from aesthetic_predictor_v2_5 import convert_v2_5_from_siglip
 
-from .base import MetricRunner
+from aesthetic_predictor_v2_5 import convert_v2_5_from_siglip
+from .base import MetricRunner, load
 
 
 class AestheticRunner(MetricRunner):
@@ -17,22 +17,28 @@ class AestheticRunner(MetricRunner):
             low_cpu_mem_usage=False,
             trust_remote_code=True,
             attn_implementation="flash_attention_2",
+            torch_dtype=torch.float32,
         )
-        model = model.to(torch.bfloat16).cuda().requires_grad_(False)
+        model = model.cuda().requires_grad_(False)
         self.model = model
         self.preprocessor = preprocessor
 
-    @torch.no_grad()
-    def eval(self, images, ref_texts=None, is_ref=False):
-        pixel_values = (
-            self.preprocessor(images=images, return_tensors="pt")
-            .pixel_values.to(torch.bfloat16)
-            .cuda()
-        )
-        return self.model(pixel_values).logits.squeeze().float().cpu()
+    def img_load_func(self, image):
+        image = load(image)
+        pixel_values = self.preprocessor(images=image, return_tensors="pt").pixel_values
+        return pixel_values
 
+    @torch.inference_mode()
+    def eval(self, images, ref_texts=None, is_ref=False):
+        pixel_values = torch.concat(images).cuda().float()
+        with torch.autocast("cuda", dtype=torch.float16):
+            result = self.model(pixel_values).logits.squeeze().float().cpu()
+        assert torch.all(~torch.isnan(result)), f"nan in result: {torch.sum(torch.isnan(result))}/{result.numel()}"
+        return result
+
+    @torch.no_grad()
     def eval_multi(self, images, ref_texts=None, ref_images=None, batch_size=32):
-        results = super().eval_multi(images, ref_texts, ref_images, batch_size)
+        results, ref_results = super().eval_multi(images, ref_texts, ref_images, batch_size)
         results = torch.concat(results, dim=0).reshape(-1)
         return [i.item() for i in results]
 

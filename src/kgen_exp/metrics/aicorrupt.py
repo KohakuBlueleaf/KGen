@@ -2,24 +2,31 @@ import os
 import numpy
 import orjsonl
 import orjson
+from PIL import Image
 from sdeval.corrupt import AICorruptMetrics
+from sdeval.corrupt.aicorrupt import _DEFAULT_MODEL_NAME
 
-from .base import MetricRunner
+from .base import MetricRunner, load
 
 
 class AICorruptRunner(MetricRunner):
     single = True
     multi = True
 
-    def __init__(self):
+    def __init__(self, model_name=_DEFAULT_MODEL_NAME):
         # load model and preprocessor
-        self.model = AICorruptMetrics(silent=True)
+        self.model = AICorruptMetrics(model_name=model_name, silent=True)
 
-    def eval(self, images, ref_texts=None, ref_images=None):
+    def img_load_func(self, image):
+        image = load(image)
+        image = image.resize((384, 384), Image.BICUBIC)
+        return image
+
+    def eval(self, images, ref_texts=None, is_ref=False):
         return self.model.score(images, mode="seq")
 
     def eval_multi(self, images, ref_texts=None, ref_images=None, batch_size=32):
-        results = super().eval_multi(images, ref_texts, ref_images, batch_size)
+        results, ref_results = super().eval_multi(images, ref_texts, ref_images, batch_size)
         results = numpy.concatenate(results, axis=0)
         return [float(i) for i in results]
 

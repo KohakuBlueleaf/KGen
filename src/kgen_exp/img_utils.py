@@ -5,7 +5,7 @@ from PIL import Image, ImageFont, ImageDraw
 def create_image_grid(images, rows=None, cols=None):
     """
     Create a grid of images from a list of PIL Image objects.
-    
+
     :param images: List of PIL Image objects
     :param rows: Number of rows in the grid (optional)
     :param cols: Number of columns in the grid (optional)
@@ -20,18 +20,18 @@ def create_image_grid(images, rows=None, cols=None):
         rows = math.ceil(n / cols)
     elif cols is None:
         cols = math.ceil(n / rows)
-    
+
     # Get the size of the first image
     w, h = images[0].size
-    
+
     # Create a new image with the appropriate size
-    grid = Image.new('RGB', size=(cols*w, rows*h))
-    
+    grid = Image.new("RGB", size=(cols * w, rows * h))
+
     # Paste the images into the grid
     for i, img in enumerate(images):
         box = (i % cols * w, i // cols * h)
         grid.paste(img, box)
-    
+
     return grid
 
 

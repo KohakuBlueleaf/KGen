@@ -1,4 +1,5 @@
 import os
+import sys
 from concurrent.futures import ProcessPoolExecutor
 from functools import partial
 
@@ -43,13 +44,14 @@ class DINOv2FeatureExtractor(nn.Module):
         x = self.normalize(x)
         with torch.autocast("cuda", dtype=torch.float16):
             x = self.model(x.cuda()).float()
+        # With * x.shape[-1] ** 0.5, the result will be much larger and related to the model size(emb dim)
+        # in here we only use normalize to get comparable result across different model sizes
         x = F.normalize(x)  # * x.shape[-1] ** 0.5
         return x
 
 
 class FIDRunner(MetricRunner):
     multi = True
-    img_load_func = load_img
 
     def __init__(self, feature=2048, img_size=(299, 299)):
         self.model = (
@@ -80,26 +82,31 @@ class FIDRunner(MetricRunner):
 
 
 if __name__ == "__main__":
-    for model in DINOv2FeatureExtractor.available_models():
-        swinv2 = DINOv2FeatureExtractor(model)
-        runner = FIDRunner(swinv2, (224, 224))
-        images = []
-        refs = []
+    model = sys.argv[1] if len(sys.argv) > 1 else "vitb14"
+    swinv2 = DINOv2FeatureExtractor(model)
+    runner = FIDRunner(swinv2, (224, 224))
+    print(model)
 
-        PATH = r"F:\dataset\HakuBooru\out\scenery"
-        img_files = [os.path.join(PATH, i) for i in os.listdir(PATH)]
-        refs = [i for i in img_files if i.endswith(".webp")][:32768]
+    PATH = r"F:\dataset\HakuBooru\out\scenery"
+    img_files = [os.path.join(PATH, i) for i in os.listdir(PATH)]
+    refs = [i for i in img_files if i.endswith(".webp")]  # [:32768]
+    print("ref image count:", len(refs))
 
-        PATH = "./data/dan-scenery-webp"
-        img_files = [os.path.join(PATH, i) for i in os.listdir(PATH)]
+    PATH = "./data/scenery-tag"
+    results = {}
+    for idx, folder in enumerate([i for i in os.listdir(PATH) if i =="Prompt-DB"]):
+        img_files = [
+            os.path.join(PATH, folder, i)
+            for i in os.listdir(os.path.join(PATH, folder))
+        ]
 
-        images = [i for i in img_files if i.endswith("_org.webp")]
-        print(len(images))
-        result1 = runner.eval_multi(images, ref_images=refs, batch_size=512)
+        images = [i for i in img_files if i.endswith(".webp")]
+        print(folder, len(images))
+        result = runner.eval_multi(
+            images, ref_images=refs if not idx else [], batch_size=512
+        )
+        results[folder] = result
 
-        images = [i for i in img_files if i.endswith("_gen.webp")]
-        print(len(images))
-        result2 = runner.eval_multi(images, ref_images=[], batch_size=512)
-        print(model)
-        print("Meta + scenery tag       :", result1.item())
-        print("Meta + scenery tag + TIPO:", result2.item())
+    print("=" * 20)
+    for folder, result in results.items():
+        print(f"{folder:<10}:", result.item())
