@@ -62,8 +62,8 @@ class NodeSplitter(StoppingCriteria):
 
 
 meta, operations, general, prompt = tipo.parse_tipo_request(
-    seperate_tags("masterpiece, 1girl, dragon girl, safe, absurdres".split(",")),
-    "A dragon girl",
+    seperate_tags("<TAGS>".split(",")),
+    "",
 )
 mode, length, expand = operations[0]
 prompt = tipo.apply_tipo_prompt(meta, general, prompt, mode, length, expand)
@@ -114,8 +114,8 @@ def get_next(prompt, input_ids=None, key_values=None):
             stopping_criteria=stop_criteria,
             **extra_kwargs,
         )
-
     output_sequence = generation_output.sequences
+
     scores = recorder.scores
     total_score = 1
     total = 0
@@ -127,9 +127,9 @@ def get_next(prompt, input_ids=None, key_values=None):
         score = torch.softmax(score, dim=-1)[0]
         total_score *= score[choosed]
         total += 1
-
     avg_score = total_score / total
     # print(avg_score)
+
     return (
         output_sequence,
         generation_output.past_key_values,
@@ -149,7 +149,7 @@ def get_variants(prompt, target_variants=5):
         print(score, level)
         next_level = level - 1
         score = score * level / next_level
-        for _ in range(max(2, 4+level)):
+        for _ in range(max(2, 4 + level)):
             output_sequence, past_key_values, decode, next_score = get_next(
                 prompt, input_ids, key_values
             )
