@@ -174,24 +174,21 @@ class MCTSNode:
         
 blunders = 0 # awful practice we're gonna need an object for this
 def get_variants(prompt, target_variants):
-    def best_child(node) -> MCTSNode:
+    def best_child(root) -> MCTSNode:
         """
         greedy search for leaf node with max uct1
         stop until no children or active children
         """
+        node = root
         while node.children and any(child.active for child in node.children):
             active_children = [c for c in node.children if c.active]
             active_children = [c for c in active_children if not (c.is_terminal and c.terminal_rank > 0)]
         
-            if not active_children and node.parent:
-                parent = node.parent
-                parent.children.remove(node)
-                del node
-                print(f'dead end, create new children') #DEBUG
-                return best_child(parent)
-                
             if not active_children:
-                break
+                if node.parent:
+                    node.parent.children.remove(node)
+                print(f'dead end, create new children') #DEBUG
+                return best_child(root)
             
             node = max(active_children, key=lambda c: c.uct1())
         
@@ -201,12 +198,12 @@ def get_variants(prompt, target_variants):
         global blunders
         
         print(f'{src}: terminal reached at {node.depth}')
-        # if node.score / node.depth < 0.15:
-            # blunders += 1
-            # print(f'but skipped due to low score: {node.score / node.depth}')
-        # else:
-        results.append((node.score, node.depth, node.prompt))
-        node.terminal_rank = len(results)
+        if node.score / node.depth < 0.11:
+            blunders += 1
+            print(f'but skipped due to low score: {node.score / node.depth}')
+        else:
+            results.append((node.score, node.depth, node.prompt))
+            node.terminal_rank = len(results)
         backpropagate(node, node.score * (1 - 0.1 * blunders))
         return
         
