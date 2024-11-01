@@ -170,7 +170,6 @@ class MCTSNode:
             return float("inf")
         return self.score + exploration_weight * math.sqrt( math.log(self.parent.visits) / self.visits )
         
-# blunders = 0 # awful practice we're gonna need an object for this
 def get_variants(prompt, target_variants):
     def best_child(root) -> MCTSNode:
         """
@@ -195,14 +194,17 @@ def get_variants(prompt, target_variants):
     def write_results(node, src):
         
         print(f'{src}: terminal reached at {node.depth}')
-        if node.score / node.depth < 0.10:
-            # blunders += 1
+        if node.score / node.depth < 0.11:
             print(f'but skipped due to low score: {node.score / node.depth}')
         else:
             results.append((node.score, node.depth, node.prompt))
             node.terminal_rank = len(results)
-        node.visits += 1
-        backpropagate(node, node.score * (1 - 0.1 * node.visits))
+        node.score -= 0.1 * node.score
+        backpropagate(node, node.score)
+        # if node.parent:
+            # if node in node.parent.children:
+                # node.parent.children.remove(node)
+        # backpropagate(node, node.score * (1 - 0.1 * node.visits))
         return
         
             
