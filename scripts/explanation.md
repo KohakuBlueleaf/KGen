@@ -1,6 +1,3 @@
-
-
-
 ## node structure
 
 - essential data from `get_next()`
