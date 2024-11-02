@@ -94,7 +94,7 @@ if __name__ == "__main__":
 
     PATH = "./data/scenery-tag"
     results = {}
-    for idx, folder in enumerate([i for i in os.listdir(PATH) if i =="Prompt-DB"]):
+    for idx, folder in enumerate([i for i in os.listdir(PATH) if i == "Prompt-DB"]):
         img_files = [
             os.path.join(PATH, folder, i)
             for i in os.listdir(os.path.join(PATH, folder))
