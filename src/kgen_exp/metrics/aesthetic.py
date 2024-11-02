@@ -33,12 +33,16 @@ class AestheticRunner(MetricRunner):
         pixel_values = torch.concat(images).cuda().float()
         with torch.autocast("cuda", dtype=torch.float16):
             result = self.model(pixel_values).logits.squeeze().float().cpu()
-        assert torch.all(~torch.isnan(result)), f"nan in result: {torch.sum(torch.isnan(result))}/{result.numel()}"
+        assert torch.all(
+            ~torch.isnan(result)
+        ), f"nan in result: {torch.sum(torch.isnan(result))}/{result.numel()}"
         return result
 
     @torch.no_grad()
     def eval_multi(self, images, ref_texts=None, ref_images=None, batch_size=32):
-        results, ref_results = super().eval_multi(images, ref_texts, ref_images, batch_size)
+        results, ref_results = super().eval_multi(
+            images, ref_texts, ref_images, batch_size
+        )
         results = torch.concat(results, dim=0).reshape(-1)
         return [i.item() for i in results]
 

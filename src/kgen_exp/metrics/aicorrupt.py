@@ -26,7 +26,9 @@ class AICorruptRunner(MetricRunner):
         return self.model.score(images, mode="seq")
 
     def eval_multi(self, images, ref_texts=None, ref_images=None, batch_size=32):
-        results, ref_results = super().eval_multi(images, ref_texts, ref_images, batch_size)
+        results, ref_results = super().eval_multi(
+            images, ref_texts, ref_images, batch_size
+        )
         results = numpy.concatenate(results, axis=0)
         return [float(i) for i in results]
 
