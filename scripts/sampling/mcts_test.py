@@ -196,13 +196,12 @@ def get_variants(prompt, target_variants):
     def write_results(node, src):
         
         print(f'{src}: terminal reached at {node.depth}')
-        if node.score / node.depth < 0.11:
+        if node.score / node.depth < 0.0:
             print(f'but skipped due to low score: {node.score / node.depth}')
         else:
             results.append((node.score, node.depth, node.prompt))
             node.terminal_rank = len(results)
-        node.score -= 0.1 * node.score
-        backpropagate(node, node.score)
+        backpropagate(node, node.score, True)
         # if node.parent:
             # if node in node.parent.children:
                 # node.parent.children.remove(node)
@@ -291,13 +290,13 @@ def get_variants(prompt, target_variants):
         for c in node.children:
             c.active = True
     
-    def backpropagate(node, score) -> None:
+    def backpropagate(node, score, diversity_penalty=False) -> None:
         """
         update from rollout node upward to root
         """
         while node is not None:
             node.visits += 1
-            node.score += score
+            node.score += score * node.depth if not diversity_penalty else -score
             node = node.parent
     
     results = []
@@ -328,18 +327,52 @@ def get_variants(prompt, target_variants):
             write_results(node, 'search')
     
     print(f'fowards: {total_forwards}')
+    
+    def per_depth_tally(root):
+        # Dictionary to store nodes at each depth
+        depth_nodes = {}
+        max_depth = 0
+        
+        # BFS to collect nodes by depth
+        queue = [(root, 0)]
+        while queue:
+            node, depth = queue.pop(0)
+            max_depth = max(max_depth, depth)
+            
+            if depth not in depth_nodes:
+                depth_nodes[depth] = []
+            depth_nodes[depth].append(node)
+            
+            for child in node.children:
+                queue.append((child, depth + 1))
+        
+        # Print header
+        print("\nDepth | Nodes | Children | Avg Children")
+        print("-" * 40)
+        
+        # Print data rows
+        for depth in range(max_depth + 1):
+            nodes = depth_nodes.get(depth, [])
+            num_nodes = len(nodes)
+            total_children = sum(len(node.children) for node in nodes)
+            avg_children = total_children / num_nodes if num_nodes > 0 else 0
+            
+            print(f"{depth:5d} | {num_nodes:5d} | {total_children:8d} | {avg_children:11.2f}")
+    
+    per_depth_tally(root)
+    
     return results
 
 ### END MOD HERE ###
 
 results = (
-    get_variants(prompt, target_variants=7)
+    get_variants(prompt, target_variants=128)
     # + get_variants(prompt, target_variants=3)
     # + get_variants(prompt, target_variants=3)
 )
 
-for score, level, result in sorted(results, key=lambda x: x[0] / x[1], reverse=False):
-    print(f"{score/level}")
-    print("-" * 20)
-    print(f"{result}")
-    print("=" * 50)
+# for score, level, result in sorted(results, key=lambda x: x[0] / x[1], reverse=False):
+#     print(f"{score/level}")
+#     print("-" * 20)
+#     print(f"{result}")
+#     print("=" * 50)
