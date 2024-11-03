@@ -87,6 +87,7 @@ class MCTSNode(SampleNode):
             score=score,
             parent=self,
         )
+        ## backpropagate score
         new_child.backpropagate(score)
         self.childs.append(new_child)
         ## self visit mechanism in our proposed method
@@ -94,13 +95,11 @@ class MCTSNode(SampleNode):
         self.self_total_value += new_child.score
 
         # Simulate a complete path from this child
+        gen = 0
         cur = new_child
-        is_leaf = new_child.is_leaf
-        prompt = new_child.prompt
-        inputs = new_child.inputs
-        past_key_values = new_child.past_key_values
         while not cur.is_leaf:
             total_gen += 1
+            gen += 1
             inputs, past_key_values, prompt, score = get_next(
                 cur.prompt,
                 input_ids=cur.inputs,
@@ -134,7 +133,10 @@ class MCTSNode(SampleNode):
                 )
         print("Simulate end")
 
-        new_child.simulated_result = prompt
+        new_child.simulated_result = (
+            prompt.replace("<s>", "").replace("</s>", "").strip(),
+            new_child.depth + gen,
+        )
         return new_child, total_gen
 
     def backpropagate(self, value: float):
@@ -145,68 +147,45 @@ class MCTSNode(SampleNode):
             node = node.parent
 
 
-def mcts_sample(prompt: str, variations: int = 7, num_iterations: int = 1000_000):
+def mcts_sample(
+    prompt: str,
+    variations: int = 7,
+    exploration=1.0,
+    random_walk=False,
+    solid_simulate=False,
+):
     root = MCTSNode(prompt=prompt)
     results = []
     total_iterations = 0
     total_gen = 0
+    exploration_weight = 8.0 if random_walk else 1.0
+    exploration_weight = exploration_weight * exploration
 
-    while len(results) < variations and total_iterations < num_iterations:
+    while len(results) < variations:
         # Selection
         node = root
         depth = 0
         while node.childs:
             depth += 1
-            next = node.select_child(exploration_weight=0.01)
+            next = node.select_child(
+                exploration_weight=exploration_weight / depth,
+                random_walk=random_walk,
+            )
             if next is node or next.is_leaf:
                 depth -= 1
                 break
             node = next
         print(f"Select depth: {depth}")
 
-        # Expansion
-        if not node.is_leaf:
-            new_node, gen = node.expand()
-            total_gen += gen
-            # If we got a complete generation, add it to results
-            if new_node.is_leaf or new_node.simulated_result is not None:
-                print("Add result")
-                results.append(new_node.simulated_result)
-
-        total_iterations += 1
-
-    print(f"Total iterations: {total_iterations}")
-    print(f"Total generations: {total_gen}")
-    return results, root
-
-
-def mcts_random_walk(prompt: str, variations: int = 7, num_iterations: int = 1000_000):
-    root = MCTSNode(prompt=prompt)
-    results = []
-    total_iterations = 0
-    total_gen = 0
-
-    while len(results) < variations and total_iterations < num_iterations:
-        # Selection
-        node = root
-        depth = 0
-        while node.childs:
-            depth += 1
-            next = node.select_child(exploration_weight=8 / depth, random_walk=True)
-            if next is node or next.is_leaf:
-                depth -= 1
-                break
-            node = next
-        print(f"Select depth: {depth}")
-
-        # Expansion
-        if not node.is_leaf:
-            new_node, gen = node.expand(record_simulated_path=True)
-            total_gen += gen
-            # If we got a complete generation, add it to results
-            if new_node.is_leaf or new_node.simulated_result is not None:
-                print("Add result")
-                results.append(new_node.simulated_result)
+        # Expansiona + rollout + backpropogation
+        new_node, gen = node.expand(
+            record_simulated_path=random_walk and solid_simulate
+        )
+        total_gen += gen
+        # If we got a complete generation, add it to results
+        if new_node.is_leaf or new_node.simulated_result is not None:
+            print("Add result")
+            results.append(new_node.simulated_result)
 
         total_iterations += 1
 
@@ -235,6 +214,11 @@ def count(node: MCTSNode):
 
 
 if __name__ == "__main__":
+    models.load_model(
+        "KBlueLeaf/TIPO-100M",
+        device="cuda",
+    )
+
     meta, operations, general, prompt = tipo.parse_tipo_request(
         seperate_tags("1girl, fox girl, fox ears, multiple tails".split(",")),
         "",
@@ -242,14 +226,16 @@ if __name__ == "__main__":
     mode, length, expand = operations[0]
     prompt = tipo.apply_tipo_prompt(meta, general, prompt, mode, length, expand)
 
-    models.load_model(
-        "KBlueLeaf/TIPO-200M-ft",
-        device="cuda",
+    # results, root = mcts_random_walk(prompt, variations=9)
+    results, root = mcts_sample(
+        prompt,
+        variations=16,
+        exploration=1.0,
+        random_walk=True,
+        solid_simulate=False,
     )
-    # results = greedy_tree_sample(prompt)
-    results, root = mcts_random_walk(prompt, variations=128, num_iterations=1000000)
     dot = draw_tree(root)
-    dot.render("tree128")
+    dot.render("tree16", cleanup=True, format="png")
     total_childs, total_nodes = count(root)
 
     count(root)
@@ -258,7 +244,9 @@ if __name__ == "__main__":
         "Average childs per node per depth: "
         f"{[total_childs[i] / total_nodes[i] for i in range(len(total_childs))]}"
     )
-    # for result in sorted(results):
-    #     print("=" * 20)
-    #     print(result)
-    # print("=" * 20)
+    gen_per_prompt = [x[1] for x in results]
+    print(sum(gen_per_prompt) / len(gen_per_prompt))
+    for result, gen in sorted(results):
+        print("=" * 20)
+        print(result)
+    print("=" * 20)
