@@ -22,6 +22,7 @@ from transformers.generation import (
     TopPLogitsWarper,
     MinPLogitsWarper,
 )
+from graphviz import Digraph
 
 import kgen.models as models
 import kgen.executor.tipo as tipo
@@ -60,6 +61,7 @@ class NodeSplitter(StoppingCriteria):
             if splitter(current, self.input_length):
                 return True
         return False
+
 
 def get_next(
     prompt,
@@ -225,7 +227,7 @@ def greedy_tree_sample(prompt, variations=7):
 def conventional_sample(prompt, variations=7):
     recorder = LogitsRecorder()
 
-    splitters = [lambda x, i: (x[i:].split("tags")[-1].count(",") > 6)]
+    splitters = [lambda x, i: (x[i:].split("tags")[-1].count(",") > 4)]
     splitter = NodeSplitter(splitters, input_length=len(prompt))
 
     total_gen = variations
@@ -251,12 +253,37 @@ def conventional_sample(prompt, variations=7):
                 key_values=past_key_values,
                 recorder=recorder,
                 splitter=splitter,
-            )    
+            )
             is_leaf = bool(out_seq[0][-1] == models.tokenizer.eos_token_id)
         results.append(decode)
     print("Total generation:", total_gen)
 
     return results
+
+
+# Function to draw the tree
+def draw_tree(node: SampleNode):
+    idx = 0
+
+    def assign_idx(node: SampleNode):
+        nonlocal idx
+        node.idx = idx
+        idx += 1
+        for child in node.childs:
+            assign_idx(child)
+
+    assign_idx(node)
+    dot = Digraph()
+
+    def add_nodes_edges(node: SampleNode):
+        for child in node.childs:
+            dot.node(str(child.idx))
+            dot.edge(str(node.idx), str(child.idx))
+            add_nodes_edges(child)
+
+    dot.node(str(node.idx))  # Add root node
+    add_nodes_edges(node)
+    return dot
 
 
 if __name__ == "__main__":
@@ -272,8 +299,8 @@ if __name__ == "__main__":
         device="cuda",
     )
     # results = greedy_tree_sample(prompt)
-    results = conventional_sample(prompt, 32)
-    for result in sorted(results):
-        print("=" * 20)
-        print(result)
-    print("=" * 20)
+    results = conventional_sample(prompt, 128)
+    # for result in sorted(results):
+    #     print("=" * 20)
+    #     print(result)
+    # print("=" * 20)
