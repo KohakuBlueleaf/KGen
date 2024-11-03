@@ -22,6 +22,8 @@ from transformers.generation import (
     TopPLogitsWarper,
     MinPLogitsWarper,
 )
+from tqdm import tqdm, trange
+from graphviz import Digraph
 
 import kgen.models as models
 import kgen.executor.tipo as tipo
@@ -61,6 +63,7 @@ class NodeSplitter(StoppingCriteria):
                 return True
         return False
 
+
 def get_next(
     prompt,
     input_ids=None,
@@ -81,7 +84,7 @@ def get_next(
     if recorder:
         recorder.clean()
         processors.append(recorder)
-    processors.append(TemperatureLogitsWarper(1.5))
+    processors.append(TemperatureLogitsWarper(1.0))
     processors.append(MinPLogitsWarper(0.1))
     # processors.append(TopPLogitsWarper(0.95))
     # processors.append(TopKLogitsWarper(60))
@@ -100,7 +103,6 @@ def get_next(
         generation_output = models.text_model.generate(
             input_ids=input_ids,
             generation_config=generation_config,
-            max_new_tokens=1024,
             logits_processor=processors,
             stopping_criteria=stop_criteria,
             **extra_kwargs,
@@ -120,7 +122,6 @@ def get_next(
             total_score *= score[choosed]
             total += 1
         avg_score = (total_score ** (1 / total)).item()
-        print(avg_score)
     else:
         avg_score = 0
 
@@ -136,11 +137,12 @@ class SampleNode:
     def __init__(
         self, prompt=None, inputs=None, past_key_values=None, score=0, parent=None
     ):
-        self.prompt: str = prompt
+        self.prompt: str = prompt.replace("<s>", "").replace("</s>", "").strip()
         self._inputs: torch.Tensor = inputs
         self._past_key_values: tuple[tuple[torch.FloatTensor]] = past_key_values
         self.score: float = score
 
+        self.depth = 0 if parent is None else parent.depth + 1
         self.parent: SampleNode = parent
         self.childs: list[SampleNode] = []
 
@@ -194,6 +196,7 @@ class SampleNode:
 
 
 def greedy_tree_sample(prompt, variations=7):
+    pbar = tqdm(total=variations)
     total_gen = 0
     root = SampleNode(prompt=prompt)
     for _ in range(variations):
@@ -217,6 +220,7 @@ def greedy_tree_sample(prompt, variations=7):
             now = now.parent
         total_gen += 1
         if new_child.is_leaf:
+            pbar.update(1)
             results.append(new_child.prompt)
     print(total_gen)
     return results
@@ -225,7 +229,7 @@ def greedy_tree_sample(prompt, variations=7):
 def conventional_sample(prompt, variations=7):
     recorder = LogitsRecorder()
 
-    splitters = [lambda x, i: (x[i:].split("tags")[-1].count(",") > 6)]
+    splitters = [lambda x, i: (x[i:].split("tags")[-1].count(",") > 4)]
     splitter = NodeSplitter(splitters, input_length=len(prompt))
 
     total_gen = variations
@@ -243,23 +247,55 @@ def conventional_sample(prompt, variations=7):
     results = []
     for out_seq, past_key_values, decode, score in datas:
         is_leaf = bool(out_seq[0][-1] == models.tokenizer.eos_token_id)
+        gen = 1
         while not is_leaf:
             total_gen += 1
+            gen += 1
             out_seq, past_key_values, decode, score = get_next(
                 decode,
                 input_ids=out_seq,
                 key_values=past_key_values,
                 recorder=recorder,
                 splitter=splitter,
-            )    
+            )
             is_leaf = bool(out_seq[0][-1] == models.tokenizer.eos_token_id)
-        results.append(decode)
+        results.append((decode, gen))
     print("Total generation:", total_gen)
 
     return results
 
 
+# Function to draw the tree
+def draw_tree(node: SampleNode):
+    idx = 0
+
+    def assign_idx(node: SampleNode):
+        nonlocal idx
+        node.idx = idx
+        idx += 1
+        for child in node.childs:
+            assign_idx(child)
+
+    assign_idx(node)
+    dot = Digraph()
+
+    def add_nodes_edges(node: SampleNode):
+        for child in node.childs:
+            dot.node(str(child.idx))
+            dot.edge(str(node.idx), str(child.idx))
+            add_nodes_edges(child)
+
+    dot.node(str(node.idx))  # Add root node
+    add_nodes_edges(node)
+    return dot
+
+
 if __name__ == "__main__":
+    models.load_model(
+        "KBlueLeaf/TIPO-100M",
+        device="cuda",
+    )
+
     meta, operations, general, prompt = tipo.parse_tipo_request(
         seperate_tags("1girl, fox girl, fox ears, multiple tails".split(",")),
         "",
@@ -267,13 +303,10 @@ if __name__ == "__main__":
     mode, length, expand = operations[0]
     prompt = tipo.apply_tipo_prompt(meta, general, prompt, mode, length, expand)
 
-    models.load_model(
-        "KBlueLeaf/TIPO-500M",
-        device="cuda",
-    )
-    # results = greedy_tree_sample(prompt)
-    results = conventional_sample(prompt, 32)
-    for result in sorted(results):
-        print("=" * 20)
-        print(result)
-    print("=" * 20)
+    results = conventional_sample(prompt, 16)
+    gen_per_prompt = [x[1] for x in results]
+    print(sum(gen_per_prompt) / len(gen_per_prompt))
+    # for result in sorted(results):
+    #     print("=" * 20)
+    #     print(result)
+    # print("=" * 20)
