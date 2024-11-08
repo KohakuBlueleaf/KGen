@@ -39,6 +39,7 @@ tipo_model_list = [
     ("KBlueLeaf/TIPO-200M-ft", ["TIPO-200M-ft-F16.gguf"]),
     ("KBlueLeaf/TIPO-500M", ["TIPO-500M_epoch5-F16.gguf"]),
     ("KBlueLeaf/TIPO-200M", ["TIPO-200M-40Btok-F16.gguf"]),
+    ("KBlueLeaf/TIPO-100M", ["TIPO-100M-F16.gguf"]),
 ]
 
 
