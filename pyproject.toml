@@ -23,6 +23,9 @@ urls = { "Homepage" = "https://github.com/KohakuBlueleaf/KGen" }
 dev = [
     "orjson",
     "orjsonl",
+    "torchmetrics",
+    "vendi_score",
+    "k_diffusion",
 ]
 
 [tool.setuptools]
