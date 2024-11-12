@@ -72,6 +72,7 @@ class VendiRunner(MetricRunner):
 
     @torch.no_grad()
     def eval_multi(self, images, ref_texts=None, ref_images=None, batch_size=32):
+        self.features = []
         super().eval_multi(images, ref_texts, ref_images, batch_size)
         torch.cuda.empty_cache()
         all_features = torch.cat(self.features, dim=0)
