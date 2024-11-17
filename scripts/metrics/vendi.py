@@ -10,13 +10,12 @@ if __name__ == "__main__":
     runner = VendiRunner(swinv2, (224, 224))
     print(model)
 
-    PATH = "./data/short-tlong"
+    PATH = "./data/worst"
     results = {}
     for idx, folder in enumerate([i for i in os.listdir(PATH)]):
         img_files = [
             os.path.join(PATH, folder, i)
             for i in os.listdir(os.path.join(PATH, folder))
-            if "short" in i
         ]
 
         images = [i for i in img_files if i.endswith(".webp")]
@@ -25,6 +24,7 @@ if __name__ == "__main__":
             images, batch_size=512
         )
         results[folder] = result
+        print(folder, result)
 
     print("=" * 20)
     for folder, result in results.items():
