@@ -1,12 +1,14 @@
 from typing import Optional
 
 import numpy as np
+import torch
 
 import kgen.models as models
 import kgen.executor.tipo as tipo
 from kgen.formatter import seperate_tags, apply_format
 from kgen.generate import generate
 from kgen.sampling import SampleNode, LogitsRecorder, NodeSplitter, get_next, draw_tree
+from kgen.sampling.node_splitters import tag_splitter
 
 
 class MCTSNode(SampleNode):
@@ -61,23 +63,24 @@ class MCTSNode(SampleNode):
             chosen_idx = np.argmax(scores)
         return (self.childs + [self])[chosen_idx]
 
-    def expand(self, record_simulated_path=False) -> tuple["MCTSNode", int]:
+    def expand(self, splitters=None, ids_splitters=None, record_simulated_path=False) -> tuple["MCTSNode", int]:
         print("Expand")
+        splitter = NodeSplitter(
+            splitters=splitters, ids_splitters=ids_splitters, input_length=len(self.prompt)
+        )
         # Generate new child
         recorder = LogitsRecorder()
-        splitters = [lambda x, i: (x[i:].split("tags")[-1].count(",") > 4)]
-        splitter = NodeSplitter(splitters, input_length=len(self.prompt))
 
         # Get the immediate next node
         # this score will be taken as "simulation result"
-        total_gen = 1
-        out_seq, past_key_values, decode, score = get_next(
+        out_seq, past_key_values, decode, score, inp_len, final_len = get_next(
             self.prompt,
             input_ids=self.inputs,
             key_values=self.past_key_values,
             recorder=recorder,
             splitter=splitter,
         )
+        total_gen = final_len - inp_len
 
         ## Expansion + apply rollout(simulation) result
         new_child = MCTSNode(
@@ -95,19 +98,17 @@ class MCTSNode(SampleNode):
         self.self_total_value += new_child.score
 
         # Simulate a complete path from this child
-        gen = 0
-        cur = new_child
-        while not cur.is_leaf:
-            total_gen += 1
-            gen += 1
-            inputs, past_key_values, prompt, score = get_next(
-                cur.prompt,
-                input_ids=cur.inputs,
-                key_values=cur.past_key_values,
-                recorder=recorder,
-                splitter=splitter,
-            )
-            if record_simulated_path:
+        if record_simulated_path:
+            cur = new_child
+            while not cur.is_leaf:
+                inputs, past_key_values, prompt, score, inp_len, final_len = get_next(
+                    cur.prompt,
+                    input_ids=cur.inputs,
+                    key_values=cur.past_key_values,
+                    recorder=recorder,
+                    splitter=splitter,
+                )
+                total_gen += final_len - inp_len
                 ## this implementation make the simulation path into MCTS tree directly
                 cur.childs.append(
                     MCTSNode(
@@ -122,20 +123,20 @@ class MCTSNode(SampleNode):
                 cur.self_visit_count += 1
                 cur = cur.childs[-1]
                 cur.backpropagate(score)
-            else:
-                ## This implementation ignore the procedure of simulation,
-                ## just take the final result
-                cur = MCTSNode(
-                    prompt=prompt,
-                    inputs=inputs,
-                    past_key_values=past_key_values,
-                    score=score,
-                )
+        else:
+            ## This implementation ignore the procedure of simulation,
+            ## just take the final result
+            inputs, past_key_values, prompt, score, inp_len, final_len = get_next(
+                new_child.prompt,
+                input_ids=new_child.inputs,
+                key_values=new_child.past_key_values,
+            )
+            total_gen += final_len - inp_len
         print("Simulate end")
 
         new_child.simulated_result = (
             prompt.replace("<s>", "").replace("</s>", "").strip(),
-            new_child.depth + gen,
+            total_gen,
         )
         return new_child, total_gen
 
@@ -149,6 +150,8 @@ class MCTSNode(SampleNode):
 
 def mcts_sample(
     prompt: str,
+    splitters = None,
+    ids_splitters = None,
     variations: int = 7,
     exploration=1.0,
     random_walk=False,
@@ -179,6 +182,7 @@ def mcts_sample(
 
         # Expansiona + rollout + backpropogation
         new_node, gen = node.expand(
+            splitters, ids_splitters,
             record_simulated_path=random_walk and solid_simulate
         )
         total_gen += gen
@@ -190,7 +194,7 @@ def mcts_sample(
         total_iterations += 1
 
     print(f"Total iterations: {total_iterations}")
-    print(f"Total generations: {total_gen}")
+    print(f"Total output tokens: {total_gen}")
     return results, root
 
 
@@ -229,13 +233,15 @@ if __name__ == "__main__":
     # results, root = mcts_random_walk(prompt, variations=9)
     results, root = mcts_sample(
         prompt,
-        variations=16,
+        # splitters=[tag_splitter(tag_count=4)],
+        ids_splitters=[lambda ids, i: torch.sum(ids[0, i:]==29892)>=6],
+        variations=128,
         exploration=1.0,
         random_walk=True,
         solid_simulate=False,
     )
     dot = draw_tree(root)
-    dot.render("tree16", cleanup=True, format="png")
+    dot.render("tree128", cleanup=True, format="png")
     total_childs, total_nodes = count(root)
 
     count(root)
@@ -246,7 +252,7 @@ if __name__ == "__main__":
     )
     gen_per_prompt = [x[1] for x in results]
     print(sum(gen_per_prompt) / len(gen_per_prompt))
-    for result, gen in sorted(results):
-        print("=" * 20)
-        print(result)
-    print("=" * 20)
+    # for result, gen in sorted(results):
+    #     print("=" * 20)
+    #     print(result)
+    # print("=" * 20)

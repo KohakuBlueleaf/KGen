@@ -1,34 +1,21 @@
-import re
-import random
-import heapq as hq
-from time import time
-from typing import Callable
-from typing import Optional
-
-import numpy as np
 import torch
-import torch.nn as nn
-import torch.nn.functional as F
-import torch.optim as optim
-from transformers import AutoTokenizer, logging, GenerationConfig
-from transformers.cache_utils import Cache, DynamicCache
+from transformers import GenerationConfig
 from transformers.generation import (
     LogitsProcessor,
     LogitsProcessorList,
-    StoppingCriteria,
     StoppingCriteriaList,
     TemperatureLogitsWarper,
     TopKLogitsWarper,
     TopPLogitsWarper,
     MinPLogitsWarper,
 )
-from tqdm import tqdm, trange
+from tqdm import tqdm
 from graphviz import Digraph
 
 import kgen.models as models
 import kgen.executor.tipo as tipo
-from kgen.formatter import seperate_tags, apply_format
-from kgen.generate import generate
+from kgen.formatter import seperate_tags
+from kgen.sampling.node_splitters import NodeSplitter
 
 
 class LogitsRecorder(LogitsProcessor):
@@ -45,23 +32,23 @@ class LogitsRecorder(LogitsProcessor):
         return scores
 
 
-class NodeSplitter(StoppingCriteria):
-    def __init__(self, splitters: list[str, Callable], input_length=0):
-        self.splitters = splitters
-        self.current = 0
-        self.input_length = input_length
+class LengthRecorder(LogitsProcessor):
+    def __init__(self):
+        self.inp_lengths = -1
+        self.final_lengths = -1
 
-    def clean(self, input_length=None):
-        self.current = 0
-        if input_length is not None:
-            self.input_length = input_length
+    def clean(self):
+        self.inp_lengths = -1
+        self.final_lengths = -1
 
-    def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> bool:
-        current = models.tokenizer.decode(input_ids[0])
-        for splitter in self.splitters:
-            if splitter(current, self.input_length):
-                return True
-        return False
+    def __call__(
+        self, input_ids: torch.LongTensor, scores: torch.FloatTensor
+    ) -> torch.FloatTensor:
+        cur_len = input_ids.shape[-1]
+        if self.inp_lengths == -1:
+            self.inp_lengths = cur_len
+        self.final_lengths = cur_len + 1
+        return scores
 
 
 def get_next(
@@ -80,7 +67,9 @@ def get_next(
     if key_values is not None:
         extra_kwargs["past_key_values"] = key_values
 
+    length_recorder = LengthRecorder()
     processors = LogitsProcessorList()
+    processors.append(length_recorder)
     if recorder:
         recorder.clean()
         processors.append(recorder)
@@ -91,7 +80,7 @@ def get_next(
 
     stop_criteria = StoppingCriteriaList()
     if splitter:
-        splitter.clean(len(prompt))
+        splitter.clean()
         stop_criteria.append(splitter)
 
     gen_kwargs["min_new_tokens"] = 4
@@ -130,6 +119,8 @@ def get_next(
         generation_output.past_key_values,
         models.tokenizer.decode(output_sequence[0]),
         avg_score,
+        length_recorder.inp_lengths,
+        length_recorder.final_lengths,
     )
 
 
@@ -168,12 +159,11 @@ class SampleNode:
             new_cache.append((past_key_value[0].clone(), past_key_value[1].clone()))
         return tuple(new_cache)
 
-    def gen_new_child(self):
+    def gen_new_child(self, splitter=None, ids_splitter=None):
         recorder = LogitsRecorder()
 
-        splitters = [lambda x, i: (x[i:].split("tags")[-1].count(",") > 6)]
-        splitter = NodeSplitter(splitters, input_length=len(prompt))
-        out_seq, past_key_values, decode, score = get_next(
+        splitter = NodeSplitter(splitter, ids_splitter, input_length=len(prompt))
+        out_seq, past_key_values, decode, score, inp_len, final_len = get_next(
             self.prompt,
             input_ids=self.inputs,
             key_values=self.past_key_values,
@@ -196,11 +186,13 @@ class SampleNode:
 
 
 def greedy_tree_sample(prompt, variations=7):
+    splitters = [lambda x, i: (x[i:].split("tags")[-1].count(",") > 4)]
+    splitter = NodeSplitter(splitters, input_length=len(prompt))
     pbar = tqdm(total=variations)
     total_gen = 0
     root = SampleNode(prompt=prompt)
     for _ in range(variations):
-        root.gen_new_child()
+        root.gen_new_child(splitter=splitter)
         total_gen += 1
 
     results = []
@@ -214,7 +206,7 @@ def greedy_tree_sample(prompt, variations=7):
             if next.is_leaf:
                 break
             now = next
-        now = new_child = now.gen_new_child()
+        now = new_child = now.gen_new_child(splitter=splitter)
         while now.parent:
             now.parent.score = min(now.parent.score, new_child.score)
             now = now.parent
@@ -227,40 +219,17 @@ def greedy_tree_sample(prompt, variations=7):
 
 
 def conventional_sample(prompt, variations=7):
-    recorder = LogitsRecorder()
-
-    splitters = [lambda x, i: (x[i:].split("tags")[-1].count(",") > 4)]
-    splitter = NodeSplitter(splitters, input_length=len(prompt))
-
-    total_gen = variations
-    datas = []
+    total_gen = 0
+    results = []
     for _ in range(variations):
-        out_seq, past_key_values, decode, score = get_next(
+        out_seq, past_key_values, decode, score, inp_len, final_len = get_next(
             prompt,
             input_ids=None,
             key_values=None,
-            recorder=recorder,
-            splitter=splitter,
         )
-        datas.append((out_seq, past_key_values, decode, score))
-
-    results = []
-    for out_seq, past_key_values, decode, score in datas:
-        is_leaf = bool(out_seq[0][-1] == models.tokenizer.eos_token_id)
-        gen = 1
-        while not is_leaf:
-            total_gen += 1
-            gen += 1
-            out_seq, past_key_values, decode, score = get_next(
-                decode,
-                input_ids=out_seq,
-                key_values=past_key_values,
-                recorder=recorder,
-                splitter=splitter,
-            )
-            is_leaf = bool(out_seq[0][-1] == models.tokenizer.eos_token_id)
-        results.append((decode, gen))
-    print("Total generation:", total_gen)
+        total_gen += final_len - inp_len
+        results.append((decode, score))
+    print("Total output tokens:", total_gen)
 
     return results
 
@@ -303,7 +272,7 @@ if __name__ == "__main__":
     mode, length, expand = operations[0]
     prompt = tipo.apply_tipo_prompt(meta, general, prompt, mode, length, expand)
 
-    results = conventional_sample(prompt, 16)
+    results = conventional_sample(prompt, 128)
     gen_per_prompt = [x[1] for x in results]
     print(sum(gen_per_prompt) / len(gen_per_prompt))
     # for result in sorted(results):
