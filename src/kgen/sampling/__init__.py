@@ -100,25 +100,33 @@ def get_next(
 
     if recorder is not None:
         scores = recorder.scores
+        min_score = 1
+        max_score = 0
         total_score = 1
         total = 0
         for i, (score, choosed) in enumerate(
             zip(scores[:-1], output_sequence[0][input_length:])
         ):
+            # seperator usually has a very high score, so we skip it
             if choosed == output_sequence[0][-1]:
                 continue
             score = torch.softmax(score, dim=-1)[0]
+            min_score = min(min_score, score[choosed].item())
+            max_score = max(max_score, score[choosed].item())
             total_score *= score[choosed]
             total += 1
         avg_score = (total_score ** (1 / total)).item()
     else:
+        min_score = 0
+        max_score = 0
         avg_score = 0
 
     return (
         output_sequence,
         generation_output.past_key_values,
         models.tokenizer.decode(output_sequence[0]),
-        avg_score,
+        # avg_score,
+        (min_score + max_score + avg_score)/3,
         length_recorder.inp_lengths,
         length_recorder.final_lengths,
     )
@@ -249,6 +257,12 @@ def draw_tree(node: SampleNode):
     dot = Digraph()
 
     def add_nodes_edges(node: SampleNode):
+        if node.is_leaf:
+            dot.node(str(f"leaf#{node.idx}"))
+            dot.edge(str(node.idx), str(f"leaf#{node.idx}"))
+        elif node.simulated_result is not None:
+            dot.node(str(f"sim#{node.idx}"))
+            dot.edge(str(node.idx), str(f"sim#{node.idx}"))
         for child in node.childs:
             dot.node(str(child.idx))
             dot.edge(str(node.idx), str(child.idx))

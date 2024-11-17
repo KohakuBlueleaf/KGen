@@ -234,17 +234,22 @@ if __name__ == "__main__":
     results, root = mcts_sample(
         prompt,
         # splitters=[tag_splitter(tag_count=4)],
-        ids_splitters=[lambda ids, i: torch.sum(ids[0, i:]==29892)>=6],
-        variations=128,
+        ids_splitters=[lambda ids, i: torch.sum(ids[0, i:]==29892)>=4],
+        variations=16,
         exploration=1.0,
         random_walk=True,
         solid_simulate=False,
     )
+    for result, gen in sorted(results):
+        print("=" * 20)
+        print(result)
+    print("=" * 20)
+
     dot = draw_tree(root)
-    dot.render("tree128", cleanup=True, format="png")
+    dot.attr(dpi='300')
+    dot.render("tree16", cleanup=True, format="png")
     total_childs, total_nodes = count(root)
 
-    count(root)
     print(f"Total nodes per depth: {total_nodes}")
     print(
         "Average childs per node per depth: "
@@ -252,7 +257,3 @@ if __name__ == "__main__":
     )
     gen_per_prompt = [x[1] for x in results]
     print(sum(gen_per_prompt) / len(gen_per_prompt))
-    # for result, gen in sorted(results):
-    #     print("=" * 20)
-    #     print(result)
-    # print("=" * 20)
