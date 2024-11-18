@@ -383,6 +383,8 @@ def generate_with_retry(
         if get_timing_detail and hasattr(models.text_model, "export_time"):
             timing.update(models.text_model.export_time())
         if total_timing is not None:
+            if "initial_input_tokens" not in total_timing:
+                total_timing["initial_input_tokens"] = input_token_count
             for key in timing:
                 total_timing[key] = total_timing.get(key, 0) + timing[key]
         parsed = parse_tipo_result(result)
