@@ -78,8 +78,11 @@ class VendiRunner(MetricRunner):
         all_features = torch.cat(self.features, dim=0)
         normed_all_features = F.normalize(all_features)
         # normalize the cosine similarity to [0, 1]
-        similarities = (normed_all_features @ normed_all_features.T)*0.5+0.5
-        print(similarities[similarities!=1].mean(), similarities[similarities!=1].std())
+        similarities = (normed_all_features @ normed_all_features.T) * 0.5 + 0.5
+        print(
+            similarities[similarities != 1].mean(),
+            similarities[similarities != 1].std(),
+        )
         result = vendi.score_K(similarities.cpu().numpy(), q=1, normalize=True)
         return result
 
@@ -100,9 +103,7 @@ if __name__ == "__main__":
 
         images = [i for i in img_files if i.endswith(".webp")]
         print(folder, len(images))
-        result = runner.eval_multi(
-            images, batch_size=512
-        )
+        result = runner.eval_multi(images, batch_size=512)
         results[folder] = result
         print(folder, result)
 

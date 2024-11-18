@@ -20,9 +20,7 @@ if __name__ == "__main__":
 
         images = [i for i in img_files if i.endswith(".webp")]
         print(folder, len(images))
-        result = runner.eval_multi(
-            images, batch_size=512
-        )
+        result = runner.eval_multi(images, batch_size=512)
         results[folder] = result
         print(folder, result)
 
