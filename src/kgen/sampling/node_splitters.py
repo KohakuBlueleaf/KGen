@@ -7,7 +7,12 @@ import kgen.models as models
 
 
 class NodeSplitter(StoppingCriteria):
-    def __init__(self, splitters: list[str, Callable]=None, ids_splitters: list[str, Callable]=None, input_length=0):
+    def __init__(
+        self,
+        splitters: list[str, Callable] = None,
+        ids_splitters: list[str, Callable] = None,
+        input_length=0,
+    ):
         self.splitters = splitters
         self.ids_splitters = ids_splitters
         self.input_length = 0

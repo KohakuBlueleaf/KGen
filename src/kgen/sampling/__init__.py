@@ -126,7 +126,7 @@ def get_next(
         generation_output.past_key_values,
         models.tokenizer.decode(output_sequence[0]),
         # avg_score,
-        (min_score + max_score + avg_score)/3,
+        (min_score + max_score + avg_score) / 3,
         length_recorder.inp_lengths,
         length_recorder.final_lengths,
     )
@@ -286,7 +286,7 @@ if __name__ == "__main__":
     mode, length, expand = operations[0]
     prompt = tipo.apply_tipo_prompt(meta, general, prompt, mode, length, expand)
 
-    results = conventional_sample(prompt, 128)
+    results = conventional_sample(prompt, 1024)
     gen_per_prompt = [x[1] for x in results]
     print(sum(gen_per_prompt) / len(gen_per_prompt))
     # for result in sorted(results):

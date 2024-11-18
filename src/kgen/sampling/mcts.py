@@ -63,10 +63,14 @@ class MCTSNode(SampleNode):
             chosen_idx = np.argmax(scores)
         return (self.childs + [self])[chosen_idx]
 
-    def expand(self, splitters=None, ids_splitters=None, record_simulated_path=False) -> tuple["MCTSNode", int]:
+    def expand(
+        self, splitters=None, ids_splitters=None, record_simulated_path=False
+    ) -> tuple["MCTSNode", int]:
         print("Expand")
         splitter = NodeSplitter(
-            splitters=splitters, ids_splitters=ids_splitters, input_length=len(self.prompt)
+            splitters=splitters,
+            ids_splitters=ids_splitters,
+            input_length=len(self.prompt),
         )
         # Generate new child
         recorder = LogitsRecorder()
@@ -150,8 +154,8 @@ class MCTSNode(SampleNode):
 
 def mcts_sample(
     prompt: str,
-    splitters = None,
-    ids_splitters = None,
+    splitters=None,
+    ids_splitters=None,
     variations: int = 7,
     exploration=1.0,
     random_walk=False,
@@ -182,8 +186,9 @@ def mcts_sample(
 
         # Expansiona + rollout + backpropogation
         new_node, gen = node.expand(
-            splitters, ids_splitters,
-            record_simulated_path=random_walk and solid_simulate
+            splitters,
+            ids_splitters,
+            record_simulated_path=random_walk and solid_simulate,
         )
         total_gen += gen
         # If we got a complete generation, add it to results
@@ -234,19 +239,19 @@ if __name__ == "__main__":
     results, root = mcts_sample(
         prompt,
         # splitters=[tag_splitter(tag_count=4)],
-        ids_splitters=[lambda ids, i: torch.sum(ids[0, i:]==29892)>=4],
-        variations=16,
+        ids_splitters=[lambda ids, i: torch.sum(ids[0, i:] == 29892) >= 4],
+        variations=1024,
         exploration=1.0,
         random_walk=True,
         solid_simulate=False,
     )
-    for result, gen in sorted(results):
-        print("=" * 20)
-        print(result)
-    print("=" * 20)
+    # for result, gen in sorted(results):
+    #     print("=" * 20)
+    #     print(result)
+    # print("=" * 20)
 
     dot = draw_tree(root)
-    dot.attr(dpi='300')
+    dot.attr(dpi="300")
     dot.render("tree16", cleanup=True, format="png")
     total_childs, total_nodes = count(root)
 
