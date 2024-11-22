@@ -2,9 +2,9 @@ import time
 import pathlib
 
 import kgen.models as models
-from kgen.formatter import seperate_tags, apply_format, apply_dtg_prompt
+from kgen.formatter import seperate_tags, apply_format
+from kgen.executor.dtg import apply_dtg_prompt, tag_gen
 from kgen.metainfo import TARGET
-from kgen.generate import tag_gen
 from kgen.logging import logger
 
 

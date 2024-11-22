@@ -95,6 +95,65 @@ def parse_tipo_result(result: str):
     return result_dict
 
 
+OPERATION_LIST = {
+    # None,
+    "None",
+    "short_to_tag",
+    "short_to_tag_to_long",
+    "tag_to_long",
+    "tag_to_long_to_short",
+    "tag_to_short",
+    "tag_to_short_to_long",
+    "long_to_tag",
+}
+
+
+def tipo_single_request(
+    tag_map,
+    nl_prompt="",
+    tag_length_target="",
+    nl_length_target="",
+    add_quality=True,
+    operation="",
+):
+    assert operation in OPERATION_LIST
+    rating = ", ".join(tag_map.get("rating", []))
+    artist = ", ".join(tag_map.get("artist", []))
+    characters = ", ".join(tag_map.get("characters", []))
+    copyrights = ", ".join(tag_map.get("copyrights", []))
+    general = ", ".join(tag_map.get("special", []) + tag_map.get("general", []))
+    general = general.strip().strip(",")
+    meta = {
+        "meta": ", ".join(tag_map.get("meta", [])),
+        "rating": rating or None,
+        "artist": artist.strip() or None,
+        "characters": characters.strip() or None,
+        "copyrights": copyrights.strip() or None,
+    }
+    if (
+        models.model_have_quality_info.get(models.current_model_name, None)
+        or add_quality
+    ):
+        quality = ", ".join(tag_map.get("quality", []))
+        meta["quality"] = quality
+    tag_length = tag_length_target or "long"
+    nl_length = nl_length_target or "long"
+
+    if operation == "None":
+        operation = None
+    if operation is not None and not operation.endswith("to_tag"):
+        length = nl_length
+    else:
+        length = tag_length
+
+    # list of [mode, target_output, output_name, length_target, expand]
+    # mode with None means tag only
+    operations = [
+        [operation, length, True],
+    ]
+    return meta, operations, general, nl_prompt
+
+
 def parse_tipo_request(
     tag_map,
     nl_prompt="",
@@ -324,6 +383,8 @@ def generate_with_retry(
         if get_timing_detail and hasattr(models.text_model, "export_time"):
             timing.update(models.text_model.export_time())
         if total_timing is not None:
+            if "initial_input_tokens" not in total_timing:
+                total_timing["initial_input_tokens"] = input_token_count
             for key in timing:
                 total_timing[key] = total_timing.get(key, 0) + timing[key]
         parsed = parse_tipo_result(result)

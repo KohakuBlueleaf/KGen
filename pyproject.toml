@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "tipo-kgen"
-version = "0.1.4"
+version = "0.1.5"
 description = "TIPO: Text to Image with text Presampling for Optimal prompting"
 authors = [
     { name = "Shih-Ying Yeh(KohakuBlueLeaf)", email = "apolloyeh0123@gmail.com" },
@@ -23,6 +23,9 @@ urls = { "Homepage" = "https://github.com/KohakuBlueleaf/KGen" }
 dev = [
     "orjson",
     "orjsonl",
+    "torchmetrics",
+    "vendi_score",
+    "k_diffusion",
 ]
 
 [tool.setuptools]

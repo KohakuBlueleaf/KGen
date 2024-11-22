@@ -39,6 +39,7 @@ tipo_model_list = [
     ("KBlueLeaf/TIPO-200M-ft", ["TIPO-200M-ft-F16.gguf"]),
     ("KBlueLeaf/TIPO-500M", ["TIPO-500M_epoch5-F16.gguf"]),
     ("KBlueLeaf/TIPO-200M", ["TIPO-200M-40Btok-F16.gguf"]),
+    ("KBlueLeaf/TIPO-100M", ["TIPO-100M-F16.gguf"]),
 ]
 
 
@@ -54,6 +55,9 @@ if not os.path.isdir(model_dir):
 
 
 def download_gguf(model_name=model_list[0], gguf_name=gguf_name[-1]):
+    if os.path.isfile(model_dir / f"{model_name.split('/')[-1]}_{gguf_name}"):
+        logger.info(f"GGUF model {model_name} already exists")
+        return model_dir / f"{model_name.split('/')[-1]}_{gguf_name}"
     logger.info(f"Downloading gguf model from {model_name}")
     result = hf_hub_download(
         model_name,
