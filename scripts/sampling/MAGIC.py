@@ -163,7 +163,7 @@ class MCTSNode:
         self.is_terminal = False
         self.terminal_rank = 0 # for next best
         
-    def uct1(self, exploration_weight=3):
+    def uct1(self, exploration_weight=5):
         if self.visits == 0:
             return float("inf")
         
@@ -182,9 +182,10 @@ def get_variants(prompt, target_variants):
         
             if not active_children:
                 if node.parent:
-                    node.parent.visits += 1 # you dun goofed up!!!
-                    node.parent.children.remove(node)
-                print(f'dead end, create new children') #DEBUG
+                    backpropagate(node, 0) # trigger penalty
+                    # node.parent.children.remove(node)
+                    node.active = False
+                print(f'dead end, backtracking') #DEBUG
                 return best_child(root)
             
             node = max(active_children, key=lambda c: c.uct1())
@@ -205,16 +206,19 @@ def get_variants(prompt, target_variants):
         """
         
         # print(f'{src}: terminal reached at {node.depth}') #DEBUG
-        results.append((node.score, node.depth, node.prompt))
-        node.terminal_rank = len(results)
-        backpropagate(node, node.score, True)
-        if node.parent:
-            node.parent.children.remove(node)
+        if not any(results[2] == node.prompt for results in results):
+            results.append((node.score, node.depth, node.prompt))
+            node.terminal_rank = len(results)
+        else:
+            print(f'womp womp~') #DEBUG
+        backpropagate(node, node.score)
+        # if node.parent:
+            # node.parent.children.remove(node)
         return
         
             
-    # NOTE: limit max_explore_depth to utilize mcts property
-    def rollout(node, max_explore_depth=4) -> float:
+    def rollout(node) -> None:
+    # def rollout(node, max_explore_depth=4) -> float:
         """
         simulate until max_explorate_depth or reaching terminal
         then return deepest node score
@@ -253,13 +257,10 @@ def get_variants(prompt, target_variants):
                 write_results(child, 'rollout')
                 break
             else:
+                backpropagate(child, score)
                 current_node = child
                 current_depth += 1
-            
-        node.visits += 1
 
-        return current_node.score
-            
             
     def expand(node) -> None:
         """
@@ -302,10 +303,10 @@ def get_variants(prompt, target_variants):
             
         for c in node.children:
             c.active = True
-            
-        node.visits += 1
+
     
-    def backpropagate(node, score, diversity_penalty=False) -> None:
+    def backpropagate(node, score) -> None:
+    # def backpropagate(node, score, diversity_penalty=False) -> None:
         """
         update from rollout node upward to root
         """
@@ -335,8 +336,7 @@ def get_variants(prompt, target_variants):
                 if iter % 10 == 0:
                     print(f"iter: {iter} - results: {len(results)}") #DEBUG
                 iter += 1
-                score = rollout(node)
-                backpropagate(node, score)
+                rollout(node)
             else:
                 expand(node)
         else:
@@ -399,3 +399,7 @@ results = (
 #     print("-" * 20)
 #     print(f"{result}")
 #     print("=" * 50)
+
+# for prompt in sorted(r[2] for r in results)[:10]:
+#    print(prompt)
+#    print("=" * 50)
