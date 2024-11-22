@@ -121,7 +121,6 @@ def get_next(prompt, input_ids=None, key_values=None):
 ### MOD HERE ###
     scores = recorder.scores
     log_total_score = 0
-    depth_weight = 0.8 # for prioritizing distant or near tokens
     
     for i, (score, choosed) in enumerate(
         zip(scores[:-1], output_sequence[0][input_length:])
@@ -130,10 +129,7 @@ def get_next(prompt, input_ids=None, key_values=None):
             continue
         score = torch.softmax(score, dim=-1)[0]
         token_log_prob = torch.log(score[choosed]).item()
-        weight = depth_weight ** (len(scores) - i - 1) # prioritize distant
-        # weight = depth_weight ** i # prioritize near
-        log_total_score += token_log_prob * weight
-        # log_total_score += token_log_prob
+        log_total_score += token_log_prob
 
     avg_log_score = log_total_score / len(scores) if scores else 0
     avg_score = math.exp(min(avg_log_score, 0))
@@ -167,10 +163,11 @@ class MCTSNode:
         self.is_terminal = False
         self.terminal_rank = 0 # for next best
         
-    def uct1(self, exploration_weight=0.5): # but father i wish to explor- NO!
+    def uct1(self, exploration_weight=3):
         if self.visits == 0:
             return float("inf")
-        return self.score + exploration_weight * math.sqrt( math.log(self.parent.visits) / self.visits )
+        
+        return self.score / self.visits + exploration_weight * math.sqrt( math.log(self.parent.visits) / self.visits )
         
 def get_variants(prompt, target_variants):
     def best_child(root) -> MCTSNode:
@@ -185,32 +182,39 @@ def get_variants(prompt, target_variants):
         
             if not active_children:
                 if node.parent:
+                    node.parent.visits += 1 # you dun goofed up!!!
                     node.parent.children.remove(node)
                 print(f'dead end, create new children') #DEBUG
                 return best_child(root)
             
             node = max(active_children, key=lambda c: c.uct1())
-        
+            
+        # last minute traditional mcts
+        # if node.parent:
+        #     node = node.parent
+        #     active_children = [c for c in node.children if c.active]
+        #     active_children = [c for c in active_children if not (c.is_terminal and c.terminal_rank > 0)]
+        #     node = random.choice(active_children)
+            
         return node
             
     def write_results(node, src):
+        """
+        helper function to write results and track which step reached terminal
+        meant for easier debugging
+        """
         
-        print(f'{src}: terminal reached at {node.depth}')
-        if node.score / node.depth < 0.0:
-            print(f'but skipped due to low score: {node.score / node.depth}')
-        else:
-            results.append((node.score, node.depth, node.prompt))
-            node.terminal_rank = len(results)
+        # print(f'{src}: terminal reached at {node.depth}') #DEBUG
+        results.append((node.score, node.depth, node.prompt))
+        node.terminal_rank = len(results)
         backpropagate(node, node.score, True)
-        # if node.parent:
-            # if node in node.parent.children:
-                # node.parent.children.remove(node)
-        # backpropagate(node, node.score * (1 - 0.1 * node.visits))
+        if node.parent:
+            node.parent.children.remove(node)
         return
         
             
     # NOTE: limit max_explore_depth to utilize mcts property
-    def rollout(node, max_explore_depth=2) -> float:
+    def rollout(node, max_explore_depth=4) -> float:
         """
         simulate until max_explorate_depth or reaching terminal
         then return deepest node score
@@ -220,8 +224,8 @@ def get_variants(prompt, target_variants):
         current_node = node
         current_depth = 0
         
-        while current_depth < max_explore_depth:
-        # while True:
+        # while current_depth < max_explore_depth:
+        while True:
             #DEBUG
             global total_forwards
             total_forwards += 1
@@ -251,7 +255,9 @@ def get_variants(prompt, target_variants):
             else:
                 current_node = child
                 current_depth += 1
-                
+            
+        node.visits += 1
+
         return current_node.score
             
             
@@ -262,7 +268,14 @@ def get_variants(prompt, target_variants):
         until node has max(2, 4-node.depth) children
         """
     
-        num_children = max(2, 4 - node.depth)
+        score_threshold = node.score / node.visits if node.visits > 0 else float('-inf')
+        parent_score = node.parent.score / node.parent.visits if node.parent else 0
+ 
+        if score_threshold > parent_score:
+            num_children = max(2, 5 - node.depth)
+        else:
+            num_children = max(1, 3 - node.depth)
+    
         while len(node.children) < num_children:
             #DEBUG
             global total_forwards
@@ -289,6 +302,8 @@ def get_variants(prompt, target_variants):
             
         for c in node.children:
             c.active = True
+            
+        node.visits += 1
     
     def backpropagate(node, score, diversity_penalty=False) -> None:
         """
@@ -296,7 +311,8 @@ def get_variants(prompt, target_variants):
         """
         while node is not None:
             node.visits += 1
-            node.score += score * node.depth if not diversity_penalty else -score
+            node.score += score 
+            # node.score += score if not diversity_penalty else -score * node.visits # more scalable than exploration_weight
             node = node.parent
     
     results = []
@@ -350,14 +366,21 @@ def get_variants(prompt, target_variants):
         print("\nDepth | Nodes | Children | Avg Children")
         print("-" * 40)
         
+        # Track total nodes
+        total_nodes = 0
+        
         # Print data rows
         for depth in range(max_depth + 1):
             nodes = depth_nodes.get(depth, [])
             num_nodes = len(nodes)
+            total_nodes += num_nodes
             total_children = sum(len(node.children) for node in nodes)
             avg_children = total_children / num_nodes if num_nodes > 0 else 0
             
             print(f"{depth:5d} | {num_nodes:5d} | {total_children:8d} | {avg_children:11.2f}")
+            
+        print("-" * 40)
+        print(f"Total nodes: {total_nodes}")
     
     per_depth_tally(root)
     
