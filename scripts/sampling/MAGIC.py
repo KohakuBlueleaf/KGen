@@ -119,6 +119,9 @@ def get_next(prompt, input_ids=None, key_values=None):
     output_sequence = generation_output.sequences
 
 ### MOD HERE ###
+    """
+    log score does better for mcts for some reason
+    """
     scores = recorder.scores
     log_total_score = 0
     
@@ -183,9 +186,7 @@ def get_variants(prompt, target_variants):
             if not active_children:
                 if node.parent:
                     backpropagate(node, 0) # trigger penalty
-                    # node.parent.children.remove(node)
                     node.active = False
-                print(f'dead end, backtracking') #DEBUG
                 return best_child(root)
             
             node = max(active_children, key=lambda c: c.uct1())
@@ -209,16 +210,11 @@ def get_variants(prompt, target_variants):
         if not any(results[2] == node.prompt for results in results):
             results.append((node.score, node.depth, node.prompt))
             node.terminal_rank = len(results)
-        else:
-            print(f'womp womp~') #DEBUG
         backpropagate(node, node.score)
-        # if node.parent:
-            # node.parent.children.remove(node)
         return
         
             
     def rollout(node) -> None:
-    # def rollout(node, max_explore_depth=4) -> float:
         """
         simulate until max_explorate_depth or reaching terminal
         then return deepest node score
@@ -228,9 +224,7 @@ def get_variants(prompt, target_variants):
         current_node = node
         current_depth = 0
         
-        # while current_depth < max_explore_depth:
         while True:
-            #DEBUG
             global total_forwards
             total_forwards += 1
             
@@ -278,7 +272,6 @@ def get_variants(prompt, target_variants):
             num_children = max(1, 3 - node.depth)
     
         while len(node.children) < num_children:
-            #DEBUG
             global total_forwards
             total_forwards += 1
             
@@ -300,20 +293,19 @@ def get_variants(prompt, target_variants):
             node.children.append(child)
             if child.is_terminal:
                 write_results(child, 'expand')
+                break
             
         for c in node.children:
             c.active = True
 
     
     def backpropagate(node, score) -> None:
-    # def backpropagate(node, score, diversity_penalty=False) -> None:
         """
         update from rollout node upward to root
         """
         while node is not None:
             node.visits += 1
             node.score += score 
-            # node.score += score if not diversity_penalty else -score * node.visits # more scalable than exploration_weight
             node = node.parent
     
     results = []
@@ -327,29 +319,27 @@ def get_variants(prompt, target_variants):
         # select max uct1
         node = best_child(root)
         
-        # print(f'selected node: {node.depth}, {node.input_ids[0][-2] if node.input_ids is not None else None}') #DEBUG
-        
-        if not node.is_terminal:
-            # if node unvisited: rollout and backprop
-            # otherwise expand only
-            if node.visits == 0:
-                if iter % 10 == 0:
-                    print(f"iter: {iter} - results: {len(results)}") #DEBUG
-                iter += 1
-                rollout(node)
-            else:
-                expand(node)
+        # if node unvisited: rollout and backprop
+        if node.visits == 0:
+            if iter % 10 == 0:
+                print(f"iter: {iter} - results: {len(results)}") #DEBUG
+            iter += 1
+            rollout(node)
+
+        # otherwise expand only
         else:
-            write_results(node, 'search')
+            expand(node)
     
     print(f'fowards: {total_forwards}')
     
     def per_depth_tally(root):
-        # Dictionary to store nodes at each depth
+        """
+        helper function for tree stats
+        """
+        
         depth_nodes = {}
         max_depth = 0
         
-        # BFS to collect nodes by depth
         queue = [(root, 0)]
         while queue:
             node, depth = queue.pop(0)
@@ -362,14 +352,11 @@ def get_variants(prompt, target_variants):
             for child in node.children:
                 queue.append((child, depth + 1))
         
-        # Print header
         print("\nDepth | Nodes | Children | Avg Children")
         print("-" * 40)
         
-        # Track total nodes
         total_nodes = 0
         
-        # Print data rows
         for depth in range(max_depth + 1):
             nodes = depth_nodes.get(depth, [])
             num_nodes = len(nodes)
