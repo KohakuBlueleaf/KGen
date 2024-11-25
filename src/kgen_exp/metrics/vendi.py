@@ -84,7 +84,7 @@ class VendiRunner(MetricRunner):
             similarities[similarities != 1].std(),
         )
         result = vendi.score_K(similarities.cpu().numpy(), q=1, normalize=True)
-        return result
+        return result, similarities.cpu().numpy()
 
 
 if __name__ == "__main__":
