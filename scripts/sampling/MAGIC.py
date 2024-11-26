@@ -1,392 +1,277 @@
-import re
-import random
-from time import time
-from typing import Callable
-import heapq as hq
+from typing import Optional
 
+import numpy as np
 import torch
-import torch.nn as nn
-import torch.nn.functional as F
-import torch.optim as optim
-from transformers import AutoTokenizer, logging, GenerationConfig
-from transformers.generation import (
-    LogitsProcessorList,
-    MinLengthLogitsProcessor,
-    MinNewTokensLengthLogitsProcessor,
-    TemperatureLogitsWarper,
-    TopKLogitsWarper,
-    TopPLogitsWarper,
-    LogitsProcessor,
-    GenerationMode,
-    StoppingCriteria,
-    StoppingCriteriaList,
-)
 
 import kgen.models as models
 import kgen.executor.tipo as tipo
 from kgen.formatter import seperate_tags, apply_format
 from kgen.generate import generate
+from kgen.sampling import SampleNode, LogitsRecorder, NodeSplitter, get_next, draw_tree
+from kgen.sampling.node_splitters import tag_splitter
 
 
-class LogitsRecorder(LogitsProcessor):
-    def __init__(self):
-        self.scores = []
-
-    def clean(self):
-        self.scores = []
-
-    def __call__(
-        self, input_ids: torch.LongTensor, scores: torch.FloatTensor
-    ) -> torch.FloatTensor:
-        self.scores.append(scores.clone())
-        return scores
-
-
-class NodeSplitter(StoppingCriteria):
-    def __init__(self, splitters: list[str, Callable], input_length=0):
-        self.splitters = splitters
-        self.current = 0
-        self.input_length = input_length
-
-    def clean(self, input_length=None):
-        self.current = 0
-        if input_length is not None:
-            self.input_length = input_length
-
-    def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> bool:
-        current = models.tokenizer.decode(input_ids[0])
-        for splitter in self.splitters:
-            if splitter(current, self.input_length):
-                return True
-        return False
-
-
-meta, operations, general, prompt = tipo.parse_tipo_request(
-    seperate_tags("masterpiece, 1girl, dragon girl, safe, absurdres".split(",")),
-    "A dragon girl",
-)
-mode, length, expand = operations[0]
-prompt = tipo.apply_tipo_prompt(meta, general, prompt, mode, length, expand)
-
-models.load_model(
-    "KBlueLeaf/TIPO-500M",
-    device="cuda",
-)
-print(models.text_model.main_input_name)
-
-splitters = [
-    lambda x, i: x[i:].split("tags")[-1].split("long:")[0].split("short:")[0].count(",")
-### MOD HERE ###
-    > 4
-### END MOD HERE ###
-]
-generation_config = GenerationConfig(
-    min_new_tokens=4,
-    return_dict_in_generate=True,
-    output_scores=True,
-    do_sample=True,
-)
-
-processors = LogitsProcessorList()
-recorder = LogitsRecorder()
-processors.append(recorder)
-
-stop_criteria = StoppingCriteriaList()
-splitter = NodeSplitter(splitters, input_length=len(prompt))
-stop_criteria.append(splitter)
-
-
-def get_next(prompt, input_ids=None, key_values=None):
-    recorder.clean()
-    splitter.clean(len(prompt))
-
-    if input_ids is None:
-        inputs = models.tokenizer(prompt, return_tensors="pt")
-        input_ids = inputs["input_ids"].to(next(models.text_model.parameters()).device)
-    input_length = input_ids.shape[-1]
-    extra_kwargs = {}
-    if key_values is not None:
-        extra_kwargs["past_key_values"] = key_values
-    with torch.no_grad():
-        generation_output = models.text_model.generate(
-            input_ids=input_ids,
-            generation_config=generation_config,
-            max_new_tokens=1024,
-            logits_processor=processors,
-            stopping_criteria=stop_criteria,
-            **extra_kwargs,
-        )
-    output_sequence = generation_output.sequences
-
-### MOD HERE ###
-    """
-    log score does better for mcts for some reason
-    """
-    scores = recorder.scores
-    log_total_score = 0
+class MCTSNode(SampleNode):
+    parent: "MCTSNode"
+    childs: list["MCTSNode"]
     
-    for i, (score, choosed) in enumerate(
-        zip(scores[:-1], output_sequence[0][input_length:])
+    def __init__(
+        self, prompt, inputs=None, past_key_values=None, score=0, parent=None
     ):
-        if choosed == output_sequence[0][-1]:
-            continue
-        score = torch.softmax(score, dim=-1)[0]
-        token_log_prob = torch.log(score[choosed]).item()
-        log_total_score += token_log_prob
-
-    avg_log_score = log_total_score / len(scores) if scores else 0
-    avg_score = math.exp(min(avg_log_score, 0))
-    # print(avg_score)
-### END MOD HERE ###
-    
-    return (
-        output_sequence,
-        generation_output.past_key_values,
-        models.tokenizer.decode(output_sequence[0]),
-        avg_score,
-    )
-
-### MOD HERE ###
-import math
-
-total_forwards = 0 #DEBUG
-
-class MCTSNode:
-    def __init__(self, prompt, input_ids=None, key_values=None, parent=None, depth=0):
-        self.prompt = prompt
-        self.input_ids = input_ids
-        self.key_values = key_values
-        self.parent = parent
-        self.children = []
-        self.depth = depth # for controlling tree width
-        
-        self.active = False # for caching
-        self.score = 0
+        super().__init__(prompt, inputs, past_key_values, score, parent)
+        self.active = False
+        self.spent = False
         self.visits = 0
-        self.is_terminal = False
-        self.terminal_rank = 0 # for next best
+        self.simulated_result: Optional[str] = None
         
-    def uct1(self, exploration_weight=5):
+    def uct1(self, exploration_weight=1.4):
         if self.visits == 0:
             return float("inf")
         
-        return self.score / self.visits + exploration_weight * math.sqrt( math.log(self.parent.visits) / self.visits )
+        return self.score / self.visits + exploration_weight * np.sqrt(
+            np.log(self.parent.visits) / self.visits
+        )
         
-def get_variants(prompt, target_variants):
-    def best_child(root) -> MCTSNode:
+    def select(self, exploration=1.4) -> "MCTSNode":
         """
         greedy search for leaf node with max uct1
         stop until no children or active children
-        """
-        node = root
-        while node.children and any(child.active for child in node.children):
-            active_children = [c for c in node.children if c.active]
-            active_children = [c for c in active_children if not (c.is_terminal and c.terminal_rank > 0)]
         
-            if not active_children:
+        ---
+        should only ever be called by root in this implementation
+        """
+        node = self
+        while node.childs and any(child.active for child in node.childs):
+            active_childs = [c for c in node.childs if c.active and not c.spent]
+            
+            if not active_childs:
+                # NOTE: this part is completely baseless, just last ditch effort to make sure it doesn't get stuck
+                # it's basically the shortcoming of greedy method
+                print(f'If you\'re reading this, this method sucks') 
+                node.spent = True
+                node._backpropagate(0)
                 if node.parent:
-                    backpropagate(node, 0) # trigger penalty
-                    node.active = False
-                return best_child(root)
+                    node = node.parent
+                else:
+                    return self.select(exploration=exploration)
             
-            node = max(active_children, key=lambda c: c.uct1())
-            
-        # last minute traditional mcts
-        # if node.parent:
-        #     node = node.parent
-        #     active_children = [c for c in node.children if c.active]
-        #     active_children = [c for c in active_children if not (c.is_terminal and c.terminal_rank > 0)]
-        #     node = random.choice(active_children)
+            node = max(active_childs, key=lambda c: c.uct1(exploration_weight=exploration))
             
         return node
-            
-    def write_results(node, src):
-        """
-        helper function to write results and track which step reached terminal
-        meant for easier debugging
-        """
         
-        # print(f'{src}: terminal reached at {node.depth}') #DEBUG
-        if not any(results[2] == node.prompt for results in results):
-            results.append((node.score, node.depth, node.prompt))
-            node.terminal_rank = len(results)
-        backpropagate(node, node.score)
-        return
-        
-            
-    def rollout(node) -> None:
+    def expand(self, splitters=None, ids_splitters=None, k=4.0, alpha=0.5) -> tuple["MCTSNode", int] | tuple[None, int]:
         """
-        simulate until max_explorate_depth or reaching terminal
-        then return deepest node score
-        nodes are created along simulation path but remain inactive until expansion
-        max_explore_depth relative to node.depth
+        create childs for this node
+        convert inactive childs to active for current node if any exist
+                       
+        ---
+        if created child is terminal, return child with generated length
         """
-        current_node = node
-        current_depth = 0
+        splitter = NodeSplitter(
+            splitters=splitters,
+            ids_splitters=ids_splitters,
+            input_length=len(self.prompt),
+        )
+        recorder = LogitsRecorder()
         
-        while True:
-            global total_forwards
-            total_forwards += 1
+        # progressive widening
+        # NOTE: i kinda just got it from some papers (will provide in report if necessary) is that alright?
+        # beats max(a, b-max_depth) any day tho
+        # k, alpha are hyperparams
+        # k is like beam width or temperature or top-k or log(top-k), so i choose default max beam length from example
+        # alpha is like exploration (>0.5) vs exploitation (<0.5), i don't have any idea which is better so 0.5 i guess
+        num_childs = np.ceil(k * self.visits ** alpha)
             
-            output_sequence, past_key_values, decoded, score = get_next(
-                current_node.prompt,
-                current_node.input_ids,
-                current_node.key_values,
+        total_gen = 0
+        while len(self.childs) < num_childs:
+            out_seq, past_key_values, decode, score, inp_len, final_len = get_next(
+                self.prompt,
+                input_ids=self.inputs,
+                key_values=self.past_key_values,
+                recorder=recorder,
+                splitter=splitter,
+                # scoring='log' # NOTE: don't use log, it's worse, that or my impl.ed it wrong
             )
-            
-            is_terminal = output_sequence[0][-1] == models.tokenizer.eos_token_id
+            total_gen += final_len - inp_len
             
             child = MCTSNode(
-                prompt=decoded,
-                input_ids=output_sequence,
-                key_values=past_key_values,
-                parent=current_node,
-                depth=current_node.depth + 1,
+                prompt=decode,
+                inputs=out_seq,
+                past_key_values=past_key_values,
+                score=score,
+                parent=self,
             )
-            child.score = score
-            child.is_terminal = is_terminal
-            current_node.children.append(child)
+            self.childs.append(child)
             
-            if is_terminal:
-                write_results(child, 'rollout')
-                break
-            else:
-                backpropagate(child, score)
-                current_node = child
-                current_depth += 1
-
-            
-    def expand(node) -> None:
-        """
-        convert inactive children to active for current node if any exist
-        create childrens for visited nodes
-        until node has max(2, 4-node.depth) children
-        """
-    
-        score_threshold = node.score / node.visits if node.visits > 0 else float('-inf')
-        parent_score = node.parent.score / node.parent.visits if node.parent else 0
- 
-        if score_threshold > parent_score:
-            num_children = max(2, 5 - node.depth)
-        else:
-            num_children = max(1, 3 - node.depth)
-    
-        while len(node.children) < num_children:
-            global total_forwards
-            total_forwards += 1
-            
-            output_sequence, past_key_values, decoded, score = get_next(
-                node.prompt,
-                node.input_ids,
-                node.key_values,
-            )
-            
-            child = MCTSNode(
-                prompt=decoded,
-                input_ids=output_sequence,
-                key_values=past_key_values,
-                parent=node,
-                depth=node.depth + 1,
-            )
-            child.score = score
-            child.is_terminal = output_sequence[0][-1] == models.tokenizer.eos_token_id
-            node.children.append(child)
-            if child.is_terminal:
-                write_results(child, 'expand')
-                break
-            
-        for c in node.children:
+            if child.is_leaf:
+                child._backpropagate(score)
+                child.simulated_result = (
+                    prompt.replace("<s>", "").replace("</s>", "").strip(),
+                    total_gen
+                )
+                return child, total_gen
+        
+        for c in self.childs:
             c.active = True
-
-    
-    def backpropagate(node, score) -> None:
+                
+        return None, total_gen
+        
+        
+    def simulate(self, splitters=None, ids_splitters=None) -> tuple["MCTSNode", int]:
         """
-        update from rollout node upward to root
+        simulate from this node until reaching terminal
+        nodes are created along simulation path but remain inactive until expansion
+        
+        ---
+        return child with generated length
         """
+        splitter = NodeSplitter(
+            splitters=splitters,
+            ids_splitters=ids_splitters,
+            input_length=len(self.prompt),
+        )
+        recorder = LogitsRecorder()
+        
+        current_node = self
+        total_gen = 0
+        while True:
+            out_seq, past_key_values, decode, score, inp_len, final_len = get_next(
+                current_node.prompt,
+                input_ids=current_node.inputs,
+                key_values=current_node.past_key_values,
+                recorder=recorder,
+                splitter=splitter,
+                # scoring='log'
+            )
+            total_gen += final_len - inp_len
+            
+            child = MCTSNode(
+                prompt=decode,
+                inputs=out_seq,
+                past_key_values=past_key_values,
+                score=score,
+                parent=current_node,
+            )
+            current_node.childs.append(child)
+            
+            child._backpropagate(score)
+            if child.is_leaf:
+                child.simulated_result = (
+                    prompt.replace("<s>", "").replace("</s>", "").strip(),
+                    total_gen,
+                )
+                return child, total_gen
+            
+            current_node = child
+        
+    def _backpropagate(self, score) -> None:
+        """
+        update from this node upward
+        """
+        node = self
         while node is not None:
             node.visits += 1
             node.score += score 
             node = node.parent
-    
+        
+
+def MAGIC_sample(
+    prompt: str,
+    splitters=None,
+    ids_splitters=None,
+    variations: int = 7,
+    exploration=1.0,
+):
     results = []
-    
-    root = MCTSNode(prompt)
-    root.active = True
-    
-    #DEBUG
-    iter = 0
-    while len(results) < target_variants:
-        # select max uct1
-        node = best_child(root)
-        
-        # if node unvisited: rollout and backprop
+    root = MCTSNode(prompt=prompt)
+    total_iterations = 0
+    total_gen = 0
+
+    while len(results) < variations:
+        # Selection
+        node = root.select(exploration=exploration)
+
+        # Expansion / Simulation (Backpropagation included)
+        # NOTE: ideally, we don't separate the functions
+        # but for clarity's sake, let's keep it this way
         if node.visits == 0:
-            if iter % 10 == 0:
-                print(f"iter: {iter} - results: {len(results)}") #DEBUG
-            iter += 1
-            rollout(node)
-
-        # otherwise expand only
+            node, gen = node.simulate(
+                splitters,
+                ids_splitters
+            )
+            # NOTE: put here because we have multiple select/expand per iteration
+            if total_iterations % 10 == 0:
+                print(f'iteration: {total_iterations} - results: {len(results)}')
+            total_iterations += 1 
         else:
-            expand(node)
-    
-    print(f'fowards: {total_forwards}')
-    
-    def per_depth_tally(root):
-        """
-        helper function for tree stats
-        """
+            node, gen = node.expand(
+                splitters,
+                ids_splitters
+            )
         
-        depth_nodes = {}
-        max_depth = 0
+        total_gen += gen
         
-        queue = [(root, 0)]
-        while queue:
-            node, depth = queue.pop(0)
-            max_depth = max(max_depth, depth)
-            
-            if depth not in depth_nodes:
-                depth_nodes[depth] = []
-            depth_nodes[depth].append(node)
-            
-            for child in node.children:
-                queue.append((child, depth + 1))
         
-        print("\nDepth | Nodes | Children | Avg Children")
-        print("-" * 40)
-        
-        total_nodes = 0
-        
-        for depth in range(max_depth + 1):
-            nodes = depth_nodes.get(depth, [])
-            num_nodes = len(nodes)
-            total_nodes += num_nodes
-            total_children = sum(len(node.children) for node in nodes)
-            avg_children = total_children / num_nodes if num_nodes > 0 else 0
-            
-            print(f"{depth:5d} | {num_nodes:5d} | {total_children:8d} | {avg_children:11.2f}")
-            
-        print("-" * 40)
-        print(f"Total nodes: {total_nodes}")
-    
-    per_depth_tally(root)
-    
-    return results
+        # write result (if node is not None, has to be terminal)
+        if node: 
+            node.spent = True
+            results.append(node.simulated_result)
+            print("Add result")
 
-### END MOD HERE ###
 
-results = (
-    get_variants(prompt, target_variants=128)
-    # + get_variants(prompt, target_variants=3)
-    # + get_variants(prompt, target_variants=3)
-)
+    print(f"Total iterations: {total_iterations}")
+    print(f"Total output tokens: {total_gen}")
+    return results, root
 
-# for score, level, result in sorted(results, key=lambda x: x[0] / x[1], reverse=False):
-#     print(f"{score/level}")
-#     print("-" * 20)
-#     print(f"{result}")
-#     print("=" * 50)
 
-# for prompt in sorted(r[2] for r in results)[:10]:
-#    print(prompt)
-#    print("=" * 50)
+def _count(node: MCTSNode, depth: int = 0, total_childs=None, total_nodes=None):
+    if node.is_leaf:
+        return
+    if depth not in total_childs:
+        total_childs[depth] = 0
+        total_nodes[depth] = 0
+    total_childs[depth] += len(node.childs)
+    total_nodes[depth] += 1
+    for child in node.childs:
+        _count(child, depth + 1, total_childs, total_nodes)
+
+
+def count(node: MCTSNode):
+    total_childs = {}
+    total_nodes = {}
+    _count(node, total_childs=total_childs, total_nodes=total_nodes)
+    return total_childs, total_nodes
+
+
+if __name__ == "__main__":
+    models.load_model(
+        "KBlueLeaf/TIPO-100M",
+        device="cuda",
+    )
+
+    meta, operations, general, prompt = tipo.parse_tipo_request(
+        seperate_tags("1girl, fox girl, fox ears, multiple tails".split(",")),
+        "",
+    )
+    mode, length, expand = operations[0]
+    prompt = tipo.apply_tipo_prompt(meta, general, prompt, mode, length, expand)
+
+    results, root = MAGIC_sample(
+        prompt,
+        ids_splitters=[lambda ids, i: torch.sum(ids[0, i:] == 29892) >= 4],
+        variations=1024,
+        exploration=1.4,
+    )
+
+    dot = draw_tree(root)
+    dot.attr(dpi="300")
+    dot.render("tree16", cleanup=True, format="png")
+    total_childs, total_nodes = count(root)
+
+    print(f"Total nodes per depth: {total_nodes}")
+    print(
+        "Average childs per node per depth: "
+        f"{[total_childs[i] / total_nodes[i] for i in range(len(total_childs))]}"
+    )
+    gen_per_prompt = [x[1] for x in results]
+    print(sum(gen_per_prompt) / len(gen_per_prompt))
