@@ -221,6 +221,11 @@ def count(node: MCTSNode):
     _count(node, total_childs=total_childs, total_nodes=total_nodes)
     return total_childs, total_nodes
 
+DEFAULT_FORMAT = (
+    "<|special|>, <|characters|>, <|copyrights|>, "
+    "<|artist|>, <|extended|>, <|general|>, "
+    "<|generated|>, <|quality|>, <|meta|>, <|rating|>"
+)
 
 if __name__ == "__main__":
     models.load_model(
@@ -229,7 +234,7 @@ if __name__ == "__main__":
     )
 
     meta, operations, general, prompt = tipo.parse_tipo_request(
-        seperate_tags("1girl, fox girl, fox ears, multiple tails".split(",")),
+        seperate_tags("scenery, wide shot, masterpiece, safe".split(",")),
         "",
     )
     mode, length, expand = operations[0]
@@ -245,14 +250,15 @@ if __name__ == "__main__":
         random_walk=True,
         solid_simulate=False,
     )
-    # for result, gen in sorted(results):
-    #     print("=" * 20)
-    #     print(result)
-    # print("=" * 20)
+    with open("./test/test.txt", "w", encoding="utf-8") as f:
+        for result, gen in sorted(results):
+            result = tipo.parse_tipo_result(result)
+            formatted_output = apply_format(result, DEFAULT_FORMAT)
+            f.write(formatted_output + "\n")
 
-    dot = draw_tree(root)
-    dot.attr(dpi="300")
-    dot.render("tree16", cleanup=True, format="png")
+    # dot = draw_tree(root)
+    # dot.attr(dpi="300")
+    # dot.render("tree16", cleanup=True, format="png")
     total_childs, total_nodes = count(root)
 
     print(f"Total nodes per depth: {total_nodes}")
