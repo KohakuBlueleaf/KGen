@@ -58,6 +58,7 @@ def get_next(
     recorder: LogitsRecorder = None,
     splitter: NodeSplitter = None,
     gen_kwargs={},
+    scoring='default',
 ):
     if input_ids is None:
         inputs = models.tokenizer(prompt, return_tensors="pt")
@@ -100,22 +101,47 @@ def get_next(
 
     if recorder is not None:
         scores = recorder.scores
-        min_score = 1
-        max_score = 0
-        total_score = 1
-        total = 0
-        for i, (score, choosed) in enumerate(
-            zip(scores[:-1], output_sequence[0][input_length:])
-        ):
-            # seperator usually has a very high score, so we skip it
-            if choosed == output_sequence[0][-1]:
-                continue
-            score = torch.softmax(score, dim=-1)[0]
-            min_score = min(min_score, score[choosed].item())
-            max_score = max(max_score, score[choosed].item())
-            total_score *= score[choosed]
-            total += 1
-        avg_score = (total_score ** (1 / total)).item()
+        if scoring == 'default':
+            min_score = 1
+            max_score = 0
+            total_score = 1
+            total = 0
+            for i, (score, choosed) in enumerate(
+                zip(scores[:-1], output_sequence[0][input_length:])
+            ):
+                # seperator usually has a very high score, so we skip it
+                if choosed == output_sequence[0][-1]:
+                    continue
+                score = torch.softmax(score, dim=-1)[0]
+                min_score = min(min_score, score[choosed].item())
+                max_score = max(max_score, score[choosed].item())
+                total_score *= score[choosed]
+                total += 1
+            avg_score = (total_score ** (1 / total)).item()
+        elif scoring == 'log':
+            import math
+            
+            min_log_score = 0
+            max_log_score = float('-inf')
+            total_log_score = 0
+            total = 0
+            
+            for _, (score, choosed) in enumerate(
+                zip(scores[:-1], output_sequence[0][input_length:])
+            ):
+                if choosed == output_sequence[0][-1]:
+                    continue
+                probs = torch.softmax(score, dim=-1)[0]
+                log_prob = torch.log(probs[choosed]).item()
+                
+                min_log_score = min(min_log_score, log_prob)
+                max_log_score = max(max_log_score, log_prob)
+                total_log_score += log_prob
+                total += 1
+                
+            avg_score = math.exp(total_log_score / total if total > 0 else float('-inf'))
+            min_score = math.exp(min_log_score)
+            max_score = math.exp(max_log_score)
     else:
         min_score = 0
         max_score = 0
