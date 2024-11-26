@@ -61,3 +61,32 @@ class MetricRunner:
                 )
 
         return results, ref_results
+
+
+class TextMetricRunner:
+    single = False
+    multi = False
+
+    def eval(self, text, ref_texts=None):
+        raise NotImplementedError()
+
+    def eval_single(self, text, ref_text=None):
+        if isinstance(text, str):
+            text = [text]
+        if isinstance(ref_text, str):
+            ref_text = [ref_text]
+        return self.eval(text, ref_text)
+
+    def eval_multi(self, texts, ref_texts=None, batch_size=32):
+        if ref_texts is None:
+            ref_texts = [None] * len(texts)
+        results = []
+        for i in trange(0, len(texts), batch_size):
+            results.append(
+                self.eval_single(
+                    texts[i : i + batch_size],
+                    ref_texts[i : i + batch_size],
+                )
+            )
+        return results
+
