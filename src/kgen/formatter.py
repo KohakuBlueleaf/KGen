@@ -57,7 +57,7 @@ def apply_format(tag_map, form):
                     form = form.replace(f"<|{type}|>", ", ".join(data))
                 else:
                     form = form.replace(f"<|{type}|>", data)
-    form = re.sub(r"<\|.*\|>", "", form)
+    form = re.sub(r"<\|(?:(?!<\|.*\|>).)*\|>", "", form)
     for pattern, repl in redundant_form:
         form = pattern.sub(repl, form)
     return form.strip().strip(",")

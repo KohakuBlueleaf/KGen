@@ -14,7 +14,7 @@ from graphviz import Digraph
 
 import kgen.models as models
 import kgen.executor.tipo as tipo
-from kgen.formatter import seperate_tags
+from kgen.formatter import seperate_tags, apply_format
 from kgen.sampling.node_splitters import NodeSplitter
 
 
@@ -298,6 +298,11 @@ def draw_tree(node: SampleNode):
     add_nodes_edges(node)
     return dot
 
+DEFAULT_FORMAT = (
+    "<|special|>, <|characters|>, <|copyrights|>, "
+    "<|artist|>, <|extended|>, <|general|>, "
+    "<|generated|>, <|quality|>, <|meta|>, <|rating|>"
+)
 
 if __name__ == "__main__":
     models.load_model(
@@ -306,7 +311,7 @@ if __name__ == "__main__":
     )
 
     meta, operations, general, prompt = tipo.parse_tipo_request(
-        seperate_tags("1girl, fox girl, fox ears, multiple tails".split(",")),
+        seperate_tags("scenery, wide shot, masterpiece, safe".split(",")),
         "",
     )
     mode, length, expand = operations[0]
@@ -315,6 +320,11 @@ if __name__ == "__main__":
     results = conventional_sample(prompt, 1024)
     gen_per_prompt = [x[1] for x in results]
     print(sum(gen_per_prompt) / len(gen_per_prompt))
+    with open("./test/conventional.txt", "w", encoding="utf-8") as f:
+        for result, gen in sorted(results):
+            result = tipo.parse_tipo_result(result)
+            formatted_output = apply_format(result, DEFAULT_FORMAT)
+            f.write(formatted_output + "\n")
     # for result in sorted(results):
     #     print("=" * 20)
     #     print(result)

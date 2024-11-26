@@ -19,7 +19,7 @@ Read the [Example code](scripts/example.py) or [TIPO-test script](scripts/tipo-t
 
 TIPO: Text to Image with text Presampling for Optimal prompting
 
-[Technical Report](https://kblueleaf.net/document/TIPO-tech-report.pdf)
+Arxiv Paper: https://arxiv.org/abs/2411.08127
 
 TIPO is a LLM model system designed for generating detailed prompt from input tags or caption. Unlike DTG, TIPO can handle both tags and Natural language. In theory, you can also design your own tag in linguistic way. (For example, long blue hair is acceptable tag in TIPO and will not break the model).
 The main difference between TIPO and DTG is:
@@ -55,15 +55,14 @@ TIPO-extension: https://github.com/KohakuBlueleaf/z-tipo-extension
 #### Cite
 
 ```bibtex
-@misc{yeh2024tipo,
-  title = {TIPO: Text to Image with text presampling for Prompt Optimization},
-  author = {Yeh, Shih-Ying},
-  year = {2024},
-  month = {9},
-  day = {29},
-  note = {Technical report available at \url{https://kblueleaf.net/document/TIPO-tech-report.pdf}. 
-          Model available at \url{https://huggingface.co/KBlueLeaf/TIPO-200M-ft}. 
-          Source code available at \url{https://github.com/KohakuBlueleaf/KGen}},
+@misc{yeh2024tipotextimagetext,
+      title={TIPO: Text to Image with Text Presampling for Prompt Optimization}, 
+      author={Shih-Ying Yeh and Sang-Hyun Park and Giyeong Oh and Min Song and Youngjae Yu},
+      year={2024},
+      eprint={2411.08127},
+      archivePrefix={arXiv},
+      primaryClass={cs.CV},
+      url={https://arxiv.org/abs/2411.08127}, 
 }
 ```
 
