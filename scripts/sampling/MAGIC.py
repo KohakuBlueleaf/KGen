@@ -14,53 +14,55 @@ from kgen.sampling.node_splitters import tag_splitter
 class MCTSNode(SampleNode):
     parent: "MCTSNode"
     childs: list["MCTSNode"]
-    
-    def __init__(
-        self, prompt, inputs=None, past_key_values=None, score=0, parent=None
-    ):
+
+    def __init__(self, prompt, inputs=None, past_key_values=None, score=0, parent=None):
         super().__init__(prompt, inputs, past_key_values, score, parent)
         self.active = False
         self.spent = False
         self.visits = 0
         self.simulated_result: Optional[str] = None
-        
+
     def uct1(self, exploration_weight=1.4):
         if self.visits == 0:
             return float("inf")
-        
+
         return self.score / self.visits + exploration_weight * np.sqrt(
             np.log(self.parent.visits) / self.visits
         )
-        
+
     def select(self, exploration=1.4) -> "MCTSNode":
         """
         greedy search for leaf node with max uct1
         stop until no children or active children
-        
+
         ---
         should only ever be called by root in this implementation
         """
         node = self
         while node.childs and any(child.active for child in node.childs):
             active_childs = [c for c in node.childs if c.active and not c.spent]
-            
+
             if not active_childs:
                 # NOTE: this part is completely baseless, just last ditch effort to make sure it doesn't get stuck
                 # it's basically the shortcoming of greedy method
-                print(f'If you\'re reading this, this method sucks') 
+                print(f"If you're reading this, this method sucks")
                 node.spent = True
                 node._backpropagate(0)
                 node = node.parent
-            
-            node = max(active_childs, key=lambda c: c.uct1(exploration_weight=exploration))
-            
+
+            node = max(
+                active_childs, key=lambda c: c.uct1(exploration_weight=exploration)
+            )
+
         return node
-        
-    def expand(self, splitters=None, ids_splitters=None) -> tuple["MCTSNode", int] | tuple[None, int]:
+
+    def expand(
+        self, splitters=None, ids_splitters=None
+    ) -> tuple["MCTSNode", int] | tuple[None, int]:
         """
         create childs for this node
         convert inactive childs to active for current node if any exist
-                       
+
         ---
         if created child is terminal, return child with generated length
         """
@@ -70,12 +72,12 @@ class MCTSNode(SampleNode):
             input_length=len(self.prompt),
         )
         recorder = LogitsRecorder()
-        
+
         # progressive widening
-        k = max(2, 4-self.depth)
+        k = max(2, 4 - self.depth)
         alpha = 0.5 ** (1 + self.depth)
-        num_childs = np.ceil(k * self.visits ** alpha)
-            
+        num_childs = np.ceil(k * self.visits**alpha)
+
         total_gen = 0
         while len(self.childs) < num_childs:
             out_seq, past_key_values, decode, score, inp_len, final_len = get_next(
@@ -87,7 +89,7 @@ class MCTSNode(SampleNode):
                 # scoring='log' # NOTE: don't use log, it's worse, that or my impl.ed it wrong
             )
             total_gen += final_len - inp_len
-            
+
             child = MCTSNode(
                 prompt=decode,
                 inputs=out_seq,
@@ -96,26 +98,25 @@ class MCTSNode(SampleNode):
                 parent=self,
             )
             self.childs.append(child)
-            
+
             if child.is_leaf:
                 child._backpropagate(score)
                 child.simulated_result = (
                     prompt.replace("<s>", "").replace("</s>", "").strip(),
-                    total_gen
+                    total_gen,
                 )
                 return child, total_gen
-        
+
         for c in self.childs:
             c.active = True
-                
+
         return None, total_gen
-        
-        
+
     def simulate(self, splitters=None, ids_splitters=None) -> tuple["MCTSNode", int]:
         """
         simulate from this node until reaching terminal
         nodes are created along simulation path but remain inactive until expansion
-        
+
         ---
         return child with generated length
         """
@@ -125,7 +126,7 @@ class MCTSNode(SampleNode):
             input_length=len(self.prompt),
         )
         recorder = LogitsRecorder()
-        
+
         current_node = self
         total_gen = 0
         while True:
@@ -138,7 +139,7 @@ class MCTSNode(SampleNode):
                 # scoring='log'
             )
             total_gen += final_len - inp_len
-            
+
             child = MCTSNode(
                 prompt=decode,
                 inputs=out_seq,
@@ -147,7 +148,7 @@ class MCTSNode(SampleNode):
                 parent=current_node,
             )
             current_node.childs.append(child)
-            
+
             child._backpropagate(score)
             if child.is_leaf:
                 child.simulated_result = (
@@ -155,9 +156,9 @@ class MCTSNode(SampleNode):
                     total_gen,
                 )
                 return child, total_gen
-            
+
             current_node = child
-        
+
     def _backpropagate(self, score) -> None:
         """
         update from this node upward
@@ -165,9 +166,9 @@ class MCTSNode(SampleNode):
         node = self
         while node is not None:
             node.visits += 1
-            node.score += score 
+            node.score += score
             node = node.parent
-        
+
 
 def MAGIC_sample(
     prompt: str,
@@ -189,29 +190,21 @@ def MAGIC_sample(
         # NOTE: ideally, we don't separate the functions
         # but for clarity's sake, let's keep it this way
         if node.visits == 0:
-            node, gen = node.simulate(
-                splitters,
-                ids_splitters
-            )
+            node, gen = node.simulate(splitters, ids_splitters)
             # NOTE: put here because we have multiple select/expand per iteration
             if total_iterations % 10 == 0:
-                print(f'iteration: {total_iterations} - results: {len(results)}')
-            total_iterations += 1 
+                print(f"iteration: {total_iterations} - results: {len(results)}")
+            total_iterations += 1
         else:
-            node, gen = node.expand(
-                splitters,
-                ids_splitters
-            )
-        
+            node, gen = node.expand(splitters, ids_splitters)
+
         total_gen += gen
-        
-        
+
         # write result (if node is not None, has to be terminal)
-        if node: 
+        if node:
             node.spent = True
             results.append(node.simulated_result)
             print("Add result")
-
 
     print(f"Total iterations: {total_iterations}")
     print(f"Total output tokens: {total_gen}")

@@ -76,9 +76,9 @@ print(models.text_model.main_input_name)
 
 splitters = [
     lambda x, i: x[i:].split("tags")[-1].split("long:")[0].split("short:")[0].count(",")
-### MOD HERE ###
+    ### MOD HERE ###
     > 4
-### END MOD HERE ###
+    ### END MOD HERE ###
 ]
 generation_config = GenerationConfig(
     min_new_tokens=4,
@@ -118,13 +118,13 @@ def get_next(prompt, input_ids=None, key_values=None):
         )
     output_sequence = generation_output.sequences
 
-### MOD HERE ###
+    ### MOD HERE ###
     """
     log score does better for mcts for some reason
     """
     scores = recorder.scores
     log_total_score = 0
-    
+
     for i, (score, choosed) in enumerate(
         zip(scores[:-1], output_sequence[0][input_length:])
     ):
@@ -137,8 +137,8 @@ def get_next(prompt, input_ids=None, key_values=None):
     avg_log_score = log_total_score / len(scores) if scores else 0
     avg_score = math.exp(min(avg_log_score, 0))
     # print(avg_score)
-### END MOD HERE ###
-    
+    ### END MOD HERE ###
+
     return (
         output_sequence,
         generation_output.past_key_values,
@@ -146,10 +146,12 @@ def get_next(prompt, input_ids=None, key_values=None):
         avg_score,
     )
 
+
 ### MOD HERE ###
 import math
 
-total_forwards = 0 #DEBUG
+total_forwards = 0  # DEBUG
+
 
 class MCTSNode:
     def __init__(self, prompt, input_ids=None, key_values=None, parent=None, depth=0):
@@ -158,20 +160,23 @@ class MCTSNode:
         self.key_values = key_values
         self.parent = parent
         self.children = []
-        self.depth = depth # for controlling tree width
-        
-        self.active = False # for caching
+        self.depth = depth  # for controlling tree width
+
+        self.active = False  # for caching
         self.score = 0
         self.visits = 0
         self.is_terminal = False
-        self.terminal_rank = 0 # for next best
-        
+        self.terminal_rank = 0  # for next best
+
     def uct1(self, exploration_weight=5):
         if self.visits == 0:
             return float("inf")
-        
-        return self.score / self.visits + exploration_weight * math.sqrt( math.log(self.parent.visits) / self.visits )
-        
+
+        return self.score / self.visits + exploration_weight * math.sqrt(
+            math.log(self.parent.visits) / self.visits
+        )
+
+
 def get_variants(prompt, target_variants):
     def best_child(root) -> MCTSNode:
         """
@@ -181,39 +186,42 @@ def get_variants(prompt, target_variants):
         node = root
         while node.children and any(child.active for child in node.children):
             active_children = [c for c in node.children if c.active]
-            active_children = [c for c in active_children if not (c.is_terminal and c.terminal_rank > 0)]
-        
+            active_children = [
+                c
+                for c in active_children
+                if not (c.is_terminal and c.terminal_rank > 0)
+            ]
+
             if not active_children:
                 if node.parent:
-                    backpropagate(node, 0) # trigger penalty
+                    backpropagate(node, 0)  # trigger penalty
                     node.active = False
                 return best_child(root)
-            
+
             node = max(active_children, key=lambda c: c.uct1())
-            
+
         # last minute traditional mcts
         # if node.parent:
         #     node = node.parent
         #     active_children = [c for c in node.children if c.active]
         #     active_children = [c for c in active_children if not (c.is_terminal and c.terminal_rank > 0)]
         #     node = random.choice(active_children)
-            
+
         return node
-            
+
     def write_results(node, src):
         """
         helper function to write results and track which step reached terminal
         meant for easier debugging
         """
-        
+
         # print(f'{src}: terminal reached at {node.depth}') #DEBUG
         if not any(results[2] == node.prompt for results in results):
             results.append((node.score, node.depth, node.prompt))
             node.terminal_rank = len(results)
         backpropagate(node, node.score)
         return
-        
-            
+
     def rollout(node) -> None:
         """
         simulate until max_explorate_depth or reaching terminal
@@ -223,19 +231,19 @@ def get_variants(prompt, target_variants):
         """
         current_node = node
         current_depth = 0
-        
+
         while True:
             global total_forwards
             total_forwards += 1
-            
+
             output_sequence, past_key_values, decoded, score = get_next(
                 current_node.prompt,
                 current_node.input_ids,
                 current_node.key_values,
             )
-            
+
             is_terminal = output_sequence[0][-1] == models.tokenizer.eos_token_id
-            
+
             child = MCTSNode(
                 prompt=decoded,
                 input_ids=output_sequence,
@@ -246,41 +254,40 @@ def get_variants(prompt, target_variants):
             child.score = score
             child.is_terminal = is_terminal
             current_node.children.append(child)
-            
+
             if is_terminal:
-                write_results(child, 'rollout')
+                write_results(child, "rollout")
                 break
             else:
                 backpropagate(child, score)
                 current_node = child
                 current_depth += 1
 
-            
     def expand(node) -> None:
         """
         convert inactive children to active for current node if any exist
         create childrens for visited nodes
         until node has max(2, 4-node.depth) children
         """
-    
-        score_threshold = node.score / node.visits if node.visits > 0 else float('-inf')
+
+        score_threshold = node.score / node.visits if node.visits > 0 else float("-inf")
         parent_score = node.parent.score / node.parent.visits if node.parent else 0
- 
+
         if score_threshold > parent_score:
             num_children = max(2, 5 - node.depth)
         else:
             num_children = max(1, 3 - node.depth)
-    
+
         while len(node.children) < num_children:
             global total_forwards
             total_forwards += 1
-            
+
             output_sequence, past_key_values, decoded, score = get_next(
                 node.prompt,
                 node.input_ids,
                 node.key_values,
             )
-            
+
             child = MCTSNode(
                 prompt=decoded,
                 input_ids=output_sequence,
@@ -292,86 +299,88 @@ def get_variants(prompt, target_variants):
             child.is_terminal = output_sequence[0][-1] == models.tokenizer.eos_token_id
             node.children.append(child)
             if child.is_terminal:
-                write_results(child, 'expand')
+                write_results(child, "expand")
                 break
-            
+
         for c in node.children:
             c.active = True
 
-    
     def backpropagate(node, score) -> None:
         """
         update from rollout node upward to root
         """
         while node is not None:
             node.visits += 1
-            node.score += score 
+            node.score += score
             node = node.parent
-    
+
     results = []
-    
+
     root = MCTSNode(prompt)
     root.active = True
-    
-    #DEBUG
+
+    # DEBUG
     iter = 0
     while len(results) < target_variants:
         # select max uct1
         node = best_child(root)
-        
+
         # if node unvisited: rollout and backprop
         if node.visits == 0:
             if iter % 10 == 0:
-                print(f"iter: {iter} - results: {len(results)}") #DEBUG
+                print(f"iter: {iter} - results: {len(results)}")  # DEBUG
             iter += 1
             rollout(node)
 
         # otherwise expand only
         else:
             expand(node)
-    
-    print(f'fowards: {total_forwards}')
-    
+
+    print(f"fowards: {total_forwards}")
+
     def per_depth_tally(root):
         """
         helper function for tree stats
         """
-        
+
         depth_nodes = {}
         max_depth = 0
-        
+
         queue = [(root, 0)]
         while queue:
             node, depth = queue.pop(0)
             max_depth = max(max_depth, depth)
-            
+
             if depth not in depth_nodes:
                 depth_nodes[depth] = []
             depth_nodes[depth].append(node)
-            
+
             for child in node.children:
                 queue.append((child, depth + 1))
-        
+
         print("\nDepth | Nodes | Children | Avg Children")
         print("-" * 40)
-        
+
         total_nodes = 0
-        
+
         for depth in range(max_depth + 1):
             nodes = depth_nodes.get(depth, [])
             num_nodes = len(nodes)
             total_nodes += num_nodes
             total_children = sum(len(node.children) for node in nodes)
             avg_children = total_children / num_nodes if num_nodes > 0 else 0
-            
-            print(f"{depth:5d} | {num_nodes:5d} | {total_children:8d} | {avg_children:11.2f}")
-            
+
+            print(
+                f"{depth:5d} | {num_nodes:5d} | {total_children:8d} | {avg_children:11.2f}"
+            )
+
         print("-" * 40)
         print(f"Total nodes: {total_nodes}")
-    
+
     per_depth_tally(root)
-    
+
     return results
+
 
 ### END MOD HERE ###
 
