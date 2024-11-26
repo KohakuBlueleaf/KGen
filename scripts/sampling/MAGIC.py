@@ -50,16 +50,13 @@ class MCTSNode(SampleNode):
                 print(f'If you\'re reading this, this method sucks') 
                 node.spent = True
                 node._backpropagate(0)
-                if node.parent:
-                    node = node.parent
-                else:
-                    return self.select(exploration=exploration)
+                node = node.parent
             
             node = max(active_childs, key=lambda c: c.uct1(exploration_weight=exploration))
             
         return node
         
-    def expand(self, splitters=None, ids_splitters=None, k=4.0, alpha=0.5) -> tuple["MCTSNode", int] | tuple[None, int]:
+    def expand(self, splitters=None, ids_splitters=None) -> tuple["MCTSNode", int] | tuple[None, int]:
         """
         create childs for this node
         convert inactive childs to active for current node if any exist
@@ -75,11 +72,8 @@ class MCTSNode(SampleNode):
         recorder = LogitsRecorder()
         
         # progressive widening
-        # NOTE: i kinda just got it from some papers (will provide in report if necessary) is that alright?
-        # beats max(a, b-max_depth) any day tho
-        # k, alpha are hyperparams
-        # k is like beam width or temperature or top-k or log(top-k), so i choose default max beam length from example
-        # alpha is like exploration (>0.5) vs exploitation (<0.5), i don't have any idea which is better so 0.5 i guess
+        k = max(2, 4-self.depth)
+        alpha = 0.5 ** (1 + self.depth)
         num_childs = np.ceil(k * self.visits ** alpha)
             
         total_gen = 0
