@@ -7,7 +7,15 @@ import kgen.models as models
 import kgen.executor.tipo as tipo
 from kgen.formatter import seperate_tags, apply_format
 from kgen.generate import generate
-from kgen.sampling import SampleNode, LogitsRecorder, NodeSplitter, get_next, draw_tree
+from kgen.sampling import (
+    SampleNode,
+    LogitsRecorder,
+    NodeSplitter,
+    get_next,
+    draw_tree,
+    count,
+    DEFAULT_FORMAT,
+)
 from kgen.sampling.node_splitters import tag_splitter
 
 
@@ -152,7 +160,7 @@ class MCTSNode(SampleNode):
             node = node.parent
 
 
-def mcts_sample(
+def rw_mcts_sample(
     prompt: str,
     splitters=None,
     ids_splitters=None,
@@ -203,30 +211,6 @@ def mcts_sample(
     return results, root
 
 
-def _count(node: MCTSNode, depth: int = 0, total_childs=None, total_nodes=None):
-    if node.is_leaf:
-        return
-    if depth not in total_childs:
-        total_childs[depth] = 0
-        total_nodes[depth] = 0
-    total_childs[depth] += len(node.childs)
-    total_nodes[depth] += 1
-    for child in node.childs:
-        _count(child, depth + 1, total_childs, total_nodes)
-
-
-def count(node: MCTSNode):
-    total_childs = {}
-    total_nodes = {}
-    _count(node, total_childs=total_childs, total_nodes=total_nodes)
-    return total_childs, total_nodes
-
-DEFAULT_FORMAT = (
-    "<|special|>, <|characters|>, <|copyrights|>, "
-    "<|artist|>, <|extended|>, <|general|>, "
-    "<|generated|>, <|quality|>, <|meta|>, <|rating|>"
-)
-
 if __name__ == "__main__":
     models.load_model(
         "KBlueLeaf/TIPO-100M",
@@ -240,17 +224,17 @@ if __name__ == "__main__":
     mode, length, expand = operations[0]
     prompt = tipo.apply_tipo_prompt(meta, general, prompt, mode, length, expand)
 
-    # results, root = mcts_random_walk(prompt, variations=9)
-    results, root = mcts_sample(
+    exploration = 0.5
+    results, root = rw_mcts_sample(
         prompt,
         # splitters=[tag_splitter(tag_count=4)],
         ids_splitters=[lambda ids, i: torch.sum(ids[0, i:] == 29892) >= 4],
         variations=1024,
-        exploration=1.0,
+        exploration=exploration,
         random_walk=True,
         solid_simulate=False,
     )
-    with open("./test/test.txt", "w", encoding="utf-8") as f:
+    with open(f"./test/rw-mcts_exp-{exploration}.txt", "w", encoding="utf-8") as f:
         for result, gen in sorted(results):
             result = tipo.parse_tipo_result(result)
             formatted_output = apply_format(result, DEFAULT_FORMAT)
