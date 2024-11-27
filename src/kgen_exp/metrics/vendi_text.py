@@ -30,8 +30,8 @@ class VendiTextRunner(TextMetricRunner):
 
     @torch.no_grad()
     def eval(self, texts, ref_texts=None):
-        features = self.text_model(texts)
-        self.features.append(features.cpu())
+        features = self.text_model(texts).float().cpu()
+        self.features.append(features)
 
     @torch.no_grad()
     def eval_multi(self, texts, ref_texts=None, batch_size=32):
@@ -53,7 +53,7 @@ class VendiTextRunner(TextMetricRunner):
 if __name__ == "__main__":
     model = (
         AutoModel.from_pretrained("jinaai/jina-embeddings-v3", trust_remote_code=True)
-        .float()
+        .bfloat16()
         .eval()
         .requires_grad_(False)
         .cuda()
@@ -67,7 +67,6 @@ if __name__ == "__main__":
         texts = []
         with open(os.path.join(PATH, file), "r", encoding="utf-8") as f:
             texts = sorted(f.readlines())
-            shuffle(texts)
 
         result, sim_mat = runner.eval_multi(texts, batch_size=128)
         results[file] = result
@@ -77,4 +76,4 @@ if __name__ == "__main__":
     for file, result in results.items():
         print(f"{file:<10}:", result.item())
 
-    np.save("tgts-sim.npy", simmats)
+    np.save("./output/tgts-sim.npy", simmats)

@@ -50,11 +50,11 @@ class FDTextRunner(TextMetricRunner):
 
     @torch.no_grad()
     def eval(self, texts, ref_texts=None):
-        features = self.text_model(texts)
+        features = self.text_model(texts).float().cpu()
         if self.mode == "a":
-            self.a_features.append(F.normalize(features.cpu()))
+            self.a_features.append(F.normalize(features))
         else:
-            self.b_features.append(F.normalize(features.cpu()))
+            self.b_features.append(F.normalize(features))
 
     @torch.no_grad()
     def eval_multi(self, texts, ref_texts=None, batch_size=32):
@@ -72,7 +72,7 @@ class FDTextRunner(TextMetricRunner):
 if __name__ == "__main__":
     model = (
         AutoModel.from_pretrained("jinaai/jina-embeddings-v3", trust_remote_code=True)
-        .float()
+        .bfloat16()
         .eval()
         .requires_grad_(False)
         .cuda()
