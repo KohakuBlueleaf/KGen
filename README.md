@@ -15,6 +15,10 @@ pip install tipo-kgen
 Use in code:
 Read the [Example code](scripts/example.py) or [TIPO-test script](scripts/tipo-test.py) for more informations.
 
+## TGTS
+
+TGTS: Token Group Tree Sampling for Efficient Multi-Variants Sampling in Language Model
+
 ## TIPO
 
 TIPO: Text to Image with text Presampling for Optimal prompting
@@ -42,7 +46,7 @@ The main difference between TIPO and DTG is:
 | Huggingface       | [KBlueLeaf/TIPO-200M · Hugging Face](https://huggingface.co/KBlueLeaf/TIPO-200M) | [KBlueLeaf/TIPO-200M-ft · Hugging Face](https://huggingface.co/KBlueLeaf/TIPO-200M-ft) | [KBlueLeaf/TIPO-500M · Hugging Face](https://huggingface.co/KBlueLeaf/TIPO-500M) |
 
 *: We only count "non-padding token" in the token seen, since all the training data have very large length range.`<br/>`
-`: Since the training data is pretty short, it cost more time to reach same token seen than general LLM pretraining.`<br/>`
+`: Since the training data is pretty short, it cost more time to reach same token seen than general LLM pretraining.<br/>``
 As reference, with 4096 as max ctx length and almost all the data have reach that length, you may only need 2days to reach 10B token seen on RTX 3090 x 4 with 200M model.
 
 ### Usage
