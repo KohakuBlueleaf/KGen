@@ -145,13 +145,20 @@ def clone_kv(past_key_values):
     return tuple(tuple(kv.clone() for kv in layer) for layer in past_key_values)
 
 
+def move_kv(past_key_values, device="cpu"):
+    if past_key_values is None:
+        return None
+    return tuple(tuple(kv.to(device) for kv in layer) for layer in past_key_values)
+
+
 class SampleNode:
     def __init__(
         self, prompt=None, inputs=None, past_key_values=None, score=0, parent=None
     ):
         self.prompt: str = prompt.replace("<s>", "").replace("</s>", "").strip()
         self._inputs: torch.Tensor = inputs
-        self._past_key_values: tuple[tuple[torch.FloatTensor]] = past_key_values
+        self._past_key_values_device = inputs.device if inputs is not None else "cpu"
+        self._past_key_values: tuple[tuple[torch.FloatTensor]] = move_kv(past_key_values)
         self.score: float = score
 
         self.depth = 0 if parent is None else parent.depth + 1
@@ -173,7 +180,7 @@ class SampleNode:
 
     @property
     def past_key_values(self):
-        return clone_kv(self._past_key_values)
+        return move_kv(self._past_key_values, self._past_key_values_device)
 
     def gen_new_child(self, splitter=None, ids_splitter=None):
         recorder = LogitsRecorder()

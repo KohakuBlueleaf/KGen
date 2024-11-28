@@ -224,7 +224,7 @@ if __name__ == "__main__":
     mode, length, expand = operations[0]
     prompt = tipo.apply_tipo_prompt(meta, general, prompt, mode, length, expand)
 
-    exploration = 0.5
+    exploration = 2.0
     results, root = rw_mcts_sample(
         prompt,
         # splitters=[tag_splitter(tag_count=4)],
