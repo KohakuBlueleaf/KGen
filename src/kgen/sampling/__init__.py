@@ -158,7 +158,9 @@ class SampleNode:
         self.prompt: str = prompt.replace("<s>", "").replace("</s>", "").strip()
         self._inputs: torch.Tensor = inputs
         self._past_key_values_device = inputs.device if inputs is not None else "cpu"
-        self._past_key_values: tuple[tuple[torch.FloatTensor]] = move_kv(past_key_values)
+        self._past_key_values: tuple[tuple[torch.FloatTensor]] = move_kv(
+            past_key_values
+        )
         self.score: float = score
 
         self.depth = 0 if parent is None else parent.depth + 1
@@ -257,200 +259,6 @@ def conventional_sample(prompt, variations=7):
     return results
 
 
-def beam_search_sample(prompt, variations=7):
-    # recorder
-    total_gen = 0
-
-    # Initialize with first tokens
-    inputs = models.tokenizer(prompt, return_tensors="pt")
-    input_ids = inputs["input_ids"].to(next(models.text_model.parameters()).device)
-    input_length = input_ids.shape[-1]
-
-    beam_width = min(variations * 3, 32)  # Wider beam for more diversity
-    active_beams = [(input_ids, None, 1.0)]  # (input_ids, past_kv, cumulative_score)
-    completed_sequences = []
-
-    # Setup logits processors for scoring and diversity
-    recorder = LogitsRecorder()
-    processors = LogitsProcessorList()
-    processors.append(recorder)
-
-    while len(completed_sequences) < variations:
-        next_beams = []
-
-        # Expand each active beam
-        for beam_ids, beam_past_kv, beam_score in active_beams:
-            # Generate next token distributions
-            recorder.clean()
-            gen_kwargs = {}
-            gen_kwargs["max_new_tokens"] = 1
-            gen_kwargs["return_dict_in_generate"] = True
-            gen_kwargs["output_scores"] = True
-            gen_kwargs["do_sample"] = True
-            generation_config = GenerationConfig(**gen_kwargs)
-            with torch.no_grad():
-                generation_output = models.text_model.generate(
-                    input_ids=beam_ids.clone(),
-                    generation_config=generation_config,
-                    logits_processor=processors,
-                    past_key_values=beam_past_kv,
-                )
-            total_gen += 1
-
-            # Sample multiple candidates from the distribution
-            logits = recorder.scores[-1][0]  # Get logits for last token
-            probs = torch.softmax(logits, dim=-1)
-
-            # Sample without replacement for diversity
-            num_samples = min(beam_width, 16)  # Limit samples per beam
-            candidates = torch.multinomial(probs, num_samples, replacement=False)
-            for candidate in candidates:
-                new_ids = beam_ids.clone()
-                new_ids = torch.cat(
-                    [new_ids, candidate.unsqueeze(0).unsqueeze(0)], dim=-1
-                )
-
-                # Calculate sequence score
-                candidate_prob = probs[candidate].item()
-                new_score = beam_score * candidate_prob
-
-                # Check if sequence is complete
-                if candidate.item() == models.tokenizer.eos_token_id:
-                    decoded = models.tokenizer.decode(new_ids[0])
-                    if decoded not in [seq[0] for seq in completed_sequences]:
-                        print(
-                            f"Completed: {len(completed_sequences)} ({new_score:.4f})"
-                        )
-                        completed_sequences.append((decoded, new_score))
-                else:
-                    next_beams.append(
-                        (
-                            new_ids,
-                            clone_kv(generation_output.past_key_values),
-                            new_score,
-                        )
-                    )
-
-        # Prune and select top beams
-        next_beams.sort(key=lambda x: x[2], reverse=True)
-        active_beams = next_beams[:beam_width]
-
-        # Break if no active beams
-        if not active_beams:
-            break
-
-        # Avoid infinite loops
-        if any(ids.shape[-1] > 1024 for ids, _, _ in active_beams):
-            break
-
-    print("Total output tokens:", total_gen)
-    print("Completed sequences:", len(completed_sequences))
-    # If we don't have enough sequences, return what we have
-    return completed_sequences[:variations]
-
-
-def stochastic_beam_search(prompt, variations=7, temperature=1.0, min_p=0.1):
-    # recorder
-    total_gen = 0
-
-    # Initialize with first tokens
-    inputs = models.tokenizer(prompt, return_tensors="pt")
-    input_ids = inputs["input_ids"].to(next(models.text_model.parameters()).device)
-    input_length = input_ids.shape[-1]
-
-    beam_width = min(variations * 3, 32)
-    active_beams = [(input_ids, None, 0.0)]  # Using log probabilities
-    completed_sequences = []
-
-    # Setup processors
-    recorder = LogitsRecorder()
-    processors = LogitsProcessorList()
-    processors.append(recorder)
-
-    while len(completed_sequences) < variations:
-        next_beams = []
-
-        for beam_ids, beam_past_kv, log_score in active_beams:
-            recorder.clean()
-            gen_kwargs = {
-                "max_new_tokens": 1,
-                "return_dict_in_generate": True,
-                "output_scores": True,
-                "do_sample": True,
-            }
-            generation_config = GenerationConfig(**gen_kwargs)
-
-            with torch.no_grad():
-                generation_output = models.text_model.generate(
-                    input_ids=beam_ids.clone(),
-                    generation_config=generation_config,
-                    logits_processor=processors,
-                    past_key_values=beam_past_kv,
-                )
-            total_gen += 1
-
-            # Get logits and apply temperature + min_p
-            logits = recorder.scores[-1][0]
-            logits = logits / temperature
-
-            # Get log probabilities
-            log_probs = torch.log_softmax(logits, dim=-1)
-            probs = torch.softmax(logits, dim=-1)
-
-            # Apply min_p filtering
-            # mask = probs < min_p * probs.max()
-            # log_probs[mask] = float("-inf")
-
-            # Add Gumbel noise for stochastic sampling
-            gumbel_noise = -torch.log(-torch.log(torch.rand_like(log_probs) + 1e-10))
-            perturbed_logprobs = log_probs + gumbel_noise
-
-            # Get top-k candidates using perturbed scores
-            num_samples = min(beam_width, 16)
-            topk_values, topk_indices = perturbed_logprobs.topk(num_samples)
-
-            for value, token_id in zip(topk_values, topk_indices):
-                new_ids = beam_ids.clone()
-                new_ids = torch.cat(
-                    [new_ids, token_id.unsqueeze(0).unsqueeze(0)], dim=-1
-                )
-
-                # Update sequence log probability
-                new_log_score = log_score + log_probs[token_id].item()
-
-                if token_id.item() == models.tokenizer.eos_token_id:
-                    decoded = models.tokenizer.decode(new_ids[0])
-                    if decoded not in [seq[0] for seq in completed_sequences]:
-                        print(
-                            f"Completed: {len(completed_sequences)} ({math.exp(new_log_score):.4f})"
-                        )
-                        completed_sequences.append((decoded, new_log_score))
-                else:
-                    next_beams.append(
-                        (
-                            new_ids,
-                            clone_kv(generation_output.past_key_values),
-                            new_log_score,
-                        )
-                    )
-
-        # Select top beams based on perturbed scores
-        next_beams.sort(key=lambda x: x[2], reverse=True)
-        active_beams = next_beams[:beam_width]
-
-        if not active_beams:
-            break
-
-        if any(ids.shape[-1] > 1024 for ids, _, _ in active_beams):
-            break
-
-    print("Total output tokens:", total_gen)
-    print("Completed sequences:", len(completed_sequences))
-
-    # Convert log probabilities back to probabilities for return
-    return [(seq, math.exp(score)) for seq, score in completed_sequences[:variations]]
-
-
 # Function to draw the tree
 def draw_tree(node: SampleNode):
     idx = 0
@@ -520,7 +328,7 @@ if __name__ == "__main__":
     mode, length, expand = operations[0]
     prompt = tipo.apply_tipo_prompt(meta, general, prompt, mode, length, expand)
 
-    results = beam_search_sample(prompt, 1024)
+    results = conventional_sample(prompt, 1024)
     gen_per_prompt = [x[1] for x in results]
     print(sum(gen_per_prompt) / len(gen_per_prompt))
     with open("./test/beam_search.txt", "w", encoding="utf-8") as f:
