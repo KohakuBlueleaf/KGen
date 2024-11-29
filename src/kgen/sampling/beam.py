@@ -398,9 +398,9 @@ if __name__ == "__main__":
     # results = beam_search_sample(prompt, 1024)
     results = diverse_beam_search(
         prompt,
-        num_sequences=128,  # Number of sequences to generate
-        diversity_penalty=0.5,  # How strongly to encourage diversity
-        temperature=1.0,  # Temperature for sampling
+        num_sequences=1024,  # Number of sequences to generate
+        diversity_penalty=0.75,  # How strongly to encourage diversity
+        temperature=1.5,  # Temperature for sampling
     )
     gen_per_prompt = [x[1] for x in results]
     print(sum(gen_per_prompt) / len(gen_per_prompt))
