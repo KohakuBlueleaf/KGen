@@ -3,6 +3,7 @@ models/
 data/
 output/
 test/
+download/
 *.npy
 *.npz
 
