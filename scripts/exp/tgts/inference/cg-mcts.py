@@ -6,6 +6,7 @@ from kgen.formatter import seperate_tags, apply_format
 from kgen.sampling import (
     count,
     DEFAULT_FORMAT,
+    DEFAULT_SAMPLING_CONFIG,
 )
 from kgen.sampling.cg_mcts import cg_mcts_sample
 
@@ -29,6 +30,7 @@ if __name__ == "__main__":
             ids_splitters=[lambda ids, i: torch.sum(ids[0, i:] == 29892) >= 4],
             variations=1024,
             exploration=exploration,
+            **DEFAULT_SAMPLING_CONFIG,
         )
         with open(f"./test/cg-mcts_exp-{exploration}.txt", "w", encoding="utf-8") as f:
             for result, gen in sorted(results):

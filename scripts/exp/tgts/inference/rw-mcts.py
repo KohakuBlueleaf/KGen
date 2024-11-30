@@ -6,6 +6,7 @@ from kgen.formatter import seperate_tags, apply_format
 from kgen.sampling import (
     count,
     DEFAULT_FORMAT,
+    DEFAULT_SAMPLING_CONFIG,
 )
 from kgen.sampling.rw_mcts import rw_mcts_sample
 
@@ -32,6 +33,7 @@ if __name__ == "__main__":
             exploration=exploration,
             random_walk=True,
             solid_simulate=False,
+            **DEFAULT_SAMPLING_CONFIG,
         )
         with open(f"./test/rw-mcts_exp-{exploration}.txt", "w", encoding="utf-8") as f:
             for result, gen in sorted(results):

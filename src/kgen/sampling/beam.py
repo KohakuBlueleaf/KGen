@@ -124,7 +124,7 @@ def beam_search_sample(prompt, variations=7):
     return completed_sequences[:variations]
 
 
-def stochastic_beam_search(prompt, variations=7, temperature=1.0, min_p=0.1):
+def stochastic_beam_search(prompt, variations=7, temperature=1.0):
     # recorder
     total_gen = 0
 

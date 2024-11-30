@@ -1,7 +1,7 @@
 import kgen.models as models
 import kgen.executor.tipo as tipo
 from kgen.formatter import seperate_tags, apply_format
-from kgen.sampling import DEFAULT_FORMAT
+from kgen.sampling import DEFAULT_FORMAT, DEFAULT_SAMPLING_CONFIG
 from kgen.sampling.beam import (
     beam_search_sample, diverse_beam_search, stochastic_beam_search
 )

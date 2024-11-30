@@ -65,7 +65,7 @@ class MCTSNode(SampleNode):
         return node
 
     def expand(
-        self, splitters=None, ids_splitters=None
+        self, splitters=None, ids_splitters=None, temperature=1.0, top_k=0, top_p=0.0, min_p=0.1
     ) -> tuple["MCTSNode", int] | tuple[None, int]:
         """
         create childs for this node
@@ -94,7 +94,10 @@ class MCTSNode(SampleNode):
                 key_values=self.past_key_values,
                 recorder=recorder,
                 splitter=splitter,
-                # scoring='log' # NOTE: don't use log, it's worse, that or my impl.ed it wrong
+                temperature=temperature,
+                top_k=top_k,
+                top_p=top_p,
+                min_p=min_p,
             )
             total_gen += final_len - inp_len
 
@@ -120,7 +123,7 @@ class MCTSNode(SampleNode):
 
         return None, total_gen
 
-    def simulate(self, splitters=None, ids_splitters=None) -> tuple["MCTSNode", int]:
+    def simulate(self, splitters=None, ids_splitters=None, temperature=1.0, top_k=0, top_p=0.0, min_p=0.1) -> tuple["MCTSNode", int]:
         """
         simulate from this node until reaching terminal
         nodes are created along simulation path but remain inactive until expansion
@@ -144,7 +147,10 @@ class MCTSNode(SampleNode):
                 key_values=current_node.past_key_values,
                 recorder=recorder,
                 splitter=splitter,
-                # scoring='log'
+                temperature=temperature,
+                top_k=top_k,
+                top_p=top_p,
+                min_p=min_p,
             )
             total_gen += final_len - inp_len
 
@@ -183,7 +189,8 @@ def cg_mcts_sample(
     splitters=None,
     ids_splitters=None,
     variations: int = 7,
-    exploration=1.0,
+    exploration=1.0
+    , temperature=1.0, top_k=0, top_p=0.0, min_p=0.1
 ):
     results = []
     root = MCTSNode(prompt=prompt)
@@ -198,13 +205,13 @@ def cg_mcts_sample(
         # NOTE: ideally, we don't separate the functions
         # but for clarity's sake, let's keep it this way
         if node.visits == 0:
-            node, gen = node.simulate(splitters, ids_splitters)
+            node, gen = node.simulate(splitters, ids_splitters, temperature, top_k, top_p, min_p)
             # NOTE: put here because we have multiple select/expand per iteration
             if total_iterations % 10 == 0:
                 print(f"iteration: {total_iterations} - results: {len(results)}")
             total_iterations += 1
         else:
-            node, gen = node.expand(splitters, ids_splitters)
+            node, gen = node.expand(splitters, ids_splitters, temperature, top_k, top_p, min_p)
 
         total_gen += gen
 

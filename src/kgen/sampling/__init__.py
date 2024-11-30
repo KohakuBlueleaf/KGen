@@ -20,6 +20,20 @@ from kgen.formatter import seperate_tags, apply_format
 from kgen.sampling.node_splitters import NodeSplitter
 
 
+# Default format for experiment
+DEFAULT_FORMAT = (
+    "<|special|>, <|characters|>, <|copyrights|>, "
+    "<|artist|>, <|general|>, <|quality|>, <|meta|>, <|rating|>"
+)
+#
+DEFAULT_SAMPLING_CONFIG = {
+    "temperature": 1.0,
+    "top_k": 0,
+    "top_p": 0.0,
+    "min_p": 0.1,
+}
+
+
 class LogitsRecorder(LogitsProcessor):
     def __init__(self):
         self.scores = []
@@ -62,6 +76,10 @@ def get_next(
     gen_kwargs={},
     scoring="default",
     single_token=False,
+    temperature=1.0,
+    top_k=0,
+    top_p=0.0,
+    min_p=0.1,
 ):
     if input_ids is None:
         inputs = models.tokenizer(prompt, return_tensors="pt")
@@ -77,10 +95,14 @@ def get_next(
     if recorder:
         recorder.clean()
         processors.append(recorder)
-    processors.append(TemperatureLogitsWarper(1.0))
-    processors.append(MinPLogitsWarper(0.1))
-    # processors.append(TopPLogitsWarper(0.95))
-    # processors.append(TopKLogitsWarper(60))
+    if temperature != 1:
+        processors.append(TemperatureLogitsWarper(temperature))
+    if min_p != 0:
+        processors.append(MinPLogitsWarper(min_p))
+    if top_p != 0:
+        processors.append(TopPLogitsWarper(top_p))
+    if top_k != 0:
+        processors.append(TopKLogitsWarper(top_k))
 
     stop_criteria = StoppingCriteriaList()
     if splitter:
@@ -243,7 +265,7 @@ def greedy_tree_sample(prompt, variations=7):
     return results
 
 
-def conventional_sample(prompt, variations=7):
+def conventional_sample(prompt, variations=7, temperature=1.0, top_k=0, top_p=0.0, min_p=0.1):
     total_gen = 0
     results = []
     for _ in range(variations):
@@ -251,6 +273,10 @@ def conventional_sample(prompt, variations=7):
             prompt,
             input_ids=None,
             key_values=None,
+            temperature=temperature,
+            top_k=top_k,
+            top_p=top_p,
+            min_p=min_p,
         )
         total_gen += final_len - inp_len
         results.append((decode, score))
@@ -307,12 +333,6 @@ def count(node: SampleNode):
     total_nodes = {}
     _count(node, total_childs=total_childs, total_nodes=total_nodes)
     return total_childs, total_nodes
-
-
-DEFAULT_FORMAT = (
-    "<|special|>, <|characters|>, <|copyrights|>, "
-    "<|artist|>, <|general|>, <|quality|>, <|meta|>, <|rating|>"
-)
 
 
 if __name__ == "__main__":
