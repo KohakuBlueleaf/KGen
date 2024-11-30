@@ -23,7 +23,7 @@ Read the [Example code](scripts/example.py) or [TIPO-test script](scripts/tipo-t
 
 TGTS: Token Group Tree Sampling for Efficient Multi-Variants Sampling in Language Model
 
-Implementation can be found in [sampling module](src/kgen/sampling/). `<br>`
+Implementation can be found in [sampling module](src/kgen/sampling/). <br>
 Experiment scripts can be found in [scrtips](scripts/exp/tgts/)
 
 ## TIPO
