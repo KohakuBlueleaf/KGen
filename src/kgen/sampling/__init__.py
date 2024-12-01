@@ -265,7 +265,9 @@ def greedy_tree_sample(prompt, variations=7):
     return results
 
 
-def conventional_sample(prompt, variations=7, temperature=1.0, top_k=0, top_p=0.0, min_p=0.1):
+def conventional_sample(
+    prompt, variations=7, temperature=1.0, top_k=0, top_p=0.0, min_p=0.1
+):
     total_gen = 0
     results = []
     for _ in range(variations):

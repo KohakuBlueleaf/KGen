@@ -19,6 +19,9 @@ from kgen.sampling import (
 from kgen.sampling.node_splitters import tag_splitter
 
 
+sqrt2 = 2**0.5
+
+
 class MCTSNode(SampleNode):
     parent: "MCTSNode"
     childs: list["MCTSNode"]
@@ -38,6 +41,13 @@ class MCTSNode(SampleNode):
             np.log(self.parent.visits) / self.visits
         )
 
+    @property
+    def num_childs(self):
+        k = sqrt2
+        alpha = 0.5 ** (1 + sqrt2**self.depth)
+        num_childs = np.ceil(k * self.visits**alpha)
+        return num_childs
+
     def select(self, exploration=1.4) -> "MCTSNode":
         """
         greedy search for leaf node with max uct1
@@ -47,17 +57,9 @@ class MCTSNode(SampleNode):
         should only ever be called by root in this implementation
         """
         node = self
-        while node.childs and any(child.active for child in node.childs):
-            active_childs = [c for c in node.childs if c.active and not c.spent]
-
-            if not active_childs:
-                # NOTE: this part is completely baseless, just last ditch effort to make sure it doesn't get stuck
-                # it's basically the shortcoming of greedy method
-                print(f"If you're reading this, this method sucks")
-                node.spent = True
-                node._backpropagate(0)
-                node = node.parent
-
+        while active_childs := [c for c in node.childs if c.active and not c.spent]:
+            if node.num_childs > len(node.childs):
+                return node
             node = max(
                 active_childs, key=lambda c: c.uct1(exploration_weight=exploration)
             )
@@ -65,7 +67,13 @@ class MCTSNode(SampleNode):
         return node
 
     def expand(
-        self, splitters=None, ids_splitters=None, temperature=1.0, top_k=0, top_p=0.0, min_p=0.1
+        self,
+        splitters=None,
+        ids_splitters=None,
+        temperature=1.0,
+        top_k=0,
+        top_p=0.0,
+        min_p=0.1,
     ) -> tuple["MCTSNode", int] | tuple[None, int]:
         """
         create childs for this node
@@ -81,13 +89,12 @@ class MCTSNode(SampleNode):
         )
         recorder = LogitsRecorder()
 
-        # progressive widening
-        k = max(2, 4 - self.depth)
-        alpha = 0.5 ** (1 + self.depth)
-        num_childs = np.ceil(k * self.visits**alpha)
+        if len(self.childs) >= self.num_childs:
+            self._backpropagate(0)
+            return None, 0
 
         total_gen = 0
-        while len(self.childs) < num_childs:
+        while len([c for c in self.childs if not c.spent]) < self.num_childs:
             out_seq, past_key_values, decode, score, inp_len, final_len = get_next(
                 self.prompt,
                 input_ids=self.inputs,
@@ -123,7 +130,15 @@ class MCTSNode(SampleNode):
 
         return None, total_gen
 
-    def simulate(self, splitters=None, ids_splitters=None, temperature=1.0, top_k=0, top_p=0.0, min_p=0.1) -> tuple["MCTSNode", int]:
+    def simulate(
+        self,
+        splitters=None,
+        ids_splitters=None,
+        temperature=1.0,
+        top_k=0,
+        top_p=0.0,
+        min_p=0.1,
+    ) -> tuple["MCTSNode", int]:
         """
         simulate from this node until reaching terminal
         nodes are created along simulation path but remain inactive until expansion
@@ -189,8 +204,11 @@ def cg_mcts_sample(
     splitters=None,
     ids_splitters=None,
     variations: int = 7,
-    exploration=1.0
-    , temperature=1.0, top_k=0, top_p=0.0, min_p=0.1
+    exploration=1.0,
+    temperature=1.0,
+    top_k=0,
+    top_p=0.0,
+    min_p=0.1,
 ):
     results = []
     root = MCTSNode(prompt=prompt)
@@ -205,21 +223,22 @@ def cg_mcts_sample(
         # NOTE: ideally, we don't separate the functions
         # but for clarity's sake, let's keep it this way
         if node.visits == 0:
-            node, gen = node.simulate(splitters, ids_splitters, temperature, top_k, top_p, min_p)
-            # NOTE: put here because we have multiple select/expand per iteration
-            if total_iterations % 10 == 0:
-                print(f"iteration: {total_iterations} - results: {len(results)}")
-            total_iterations += 1
+            node, gen = node.simulate(
+                splitters, ids_splitters, temperature, top_k, top_p, min_p
+            )
         else:
-            node, gen = node.expand(splitters, ids_splitters, temperature, top_k, top_p, min_p)
-
+            node, gen = node.expand(
+                splitters, ids_splitters, temperature, top_k, top_p, min_p
+            )
+        if node:
+            total_iterations += 1
+            if total_iterations % 100 == 0:
+                print(f"iteration: {total_iterations} - results: {len(results)}")
         total_gen += gen
 
-        # write result (if node is not None, has to be terminal)
         if node:
             node.spent = True
             results.append(node.simulated_result)
-            print("Add result")
 
     print(f"Total iterations: {total_iterations}")
     print(f"Total output tokens: {total_gen}")
