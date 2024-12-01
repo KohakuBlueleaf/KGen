@@ -1,3 +1,5 @@
+import math
+
 import torch
 from transformers import GenerationConfig
 from transformers.generation import (
@@ -16,6 +18,20 @@ import kgen.models as models
 import kgen.executor.tipo as tipo
 from kgen.formatter import seperate_tags, apply_format
 from kgen.sampling.node_splitters import NodeSplitter
+
+
+# Default format for experiment
+DEFAULT_FORMAT = (
+    "<|special|>, <|characters|>, <|copyrights|>, "
+    "<|artist|>, <|general|>, <|quality|>, <|meta|>, <|rating|>"
+)
+#
+DEFAULT_SAMPLING_CONFIG = {
+    "temperature": 1.0,
+    "top_k": 0,
+    "top_p": 0.0,
+    "min_p": 0.1,
+}
 
 
 class LogitsRecorder(LogitsProcessor):
@@ -58,6 +74,12 @@ def get_next(
     recorder: LogitsRecorder = None,
     splitter: NodeSplitter = None,
     gen_kwargs={},
+    scoring="default",
+    single_token=False,
+    temperature=1.0,
+    top_k=0,
+    top_p=0.0,
+    min_p=0.1,
 ):
     if input_ids is None:
         inputs = models.tokenizer(prompt, return_tensors="pt")
@@ -73,17 +95,22 @@ def get_next(
     if recorder:
         recorder.clean()
         processors.append(recorder)
-    processors.append(TemperatureLogitsWarper(1.0))
-    processors.append(MinPLogitsWarper(0.1))
-    # processors.append(TopPLogitsWarper(0.95))
-    # processors.append(TopKLogitsWarper(60))
+    if temperature != 1:
+        processors.append(TemperatureLogitsWarper(temperature))
+    if min_p != 0:
+        processors.append(MinPLogitsWarper(min_p))
+    if top_p != 0:
+        processors.append(TopPLogitsWarper(top_p))
+    if top_k != 0:
+        processors.append(TopKLogitsWarper(top_k))
 
     stop_criteria = StoppingCriteriaList()
     if splitter:
         splitter.clean()
         stop_criteria.append(splitter)
 
-    gen_kwargs["min_new_tokens"] = 4
+    gen_kwargs["min_new_tokens"] = 1 if single_token else 4
+    gen_kwargs["max_new_tokens"] = 1 if single_token else 1024
     gen_kwargs["return_dict_in_generate"] = True
     gen_kwargs["output_scores"] = True
     gen_kwargs["do_sample"] = True
@@ -105,11 +132,13 @@ def get_next(
         total_score = 1
         total = 0
         for i, (score, choosed) in enumerate(
-            zip(scores[:-1], output_sequence[0][input_length:])
+            zip(scores, output_sequence[0][input_length:])
         ):
             # seperator usually has a very high score, so we skip it
-            if choosed == output_sequence[0][-1]:
+            if not single_token and choosed == output_sequence[0][-1]:
                 continue
+            if not single_token and choosed == models.tokenizer.eos_token_id:
+                break
             score = torch.softmax(score, dim=-1)[0]
             min_score = min(min_score, score[choosed].item())
             max_score = max(max_score, score[choosed].item())
@@ -132,13 +161,28 @@ def get_next(
     )
 
 
+def clone_kv(past_key_values):
+    if past_key_values is None:
+        return None
+    return tuple(tuple(kv.clone() for kv in layer) for layer in past_key_values)
+
+
+def move_kv(past_key_values, device="cpu"):
+    if past_key_values is None:
+        return None
+    return tuple(tuple(kv.to(device) for kv in layer) for layer in past_key_values)
+
+
 class SampleNode:
     def __init__(
         self, prompt=None, inputs=None, past_key_values=None, score=0, parent=None
     ):
         self.prompt: str = prompt.replace("<s>", "").replace("</s>", "").strip()
         self._inputs: torch.Tensor = inputs
-        self._past_key_values: tuple[tuple[torch.FloatTensor]] = past_key_values
+        self._past_key_values_device = inputs.device if inputs is not None else "cpu"
+        self._past_key_values: tuple[tuple[torch.FloatTensor]] = move_kv(
+            past_key_values
+        )
         self.score: float = score
 
         self.depth = 0 if parent is None else parent.depth + 1
@@ -160,12 +204,7 @@ class SampleNode:
 
     @property
     def past_key_values(self):
-        if self._past_key_values is None:
-            return None
-        new_cache = []
-        for past_key_value in self._past_key_values:
-            new_cache.append((past_key_value[0].clone(), past_key_value[1].clone()))
-        return tuple(new_cache)
+        return move_kv(self._past_key_values, self._past_key_values_device)
 
     def gen_new_child(self, splitter=None, ids_splitter=None):
         recorder = LogitsRecorder()
@@ -226,7 +265,9 @@ def greedy_tree_sample(prompt, variations=7):
     return results
 
 
-def conventional_sample(prompt, variations=7):
+def conventional_sample(
+    prompt, variations=7, temperature=1.0, top_k=0, top_p=0.0, min_p=0.1
+):
     total_gen = 0
     results = []
     for _ in range(variations):
@@ -234,6 +275,10 @@ def conventional_sample(prompt, variations=7):
             prompt,
             input_ids=None,
             key_values=None,
+            temperature=temperature,
+            top_k=top_k,
+            top_p=top_p,
+            min_p=min_p,
         )
         total_gen += final_len - inp_len
         results.append((decode, score))
@@ -272,11 +317,25 @@ def draw_tree(node: SampleNode):
     add_nodes_edges(node)
     return dot
 
-DEFAULT_FORMAT = (
-    "<|special|>, <|characters|>, <|copyrights|>, "
-    "<|artist|>, <|extended|>, <|general|>, "
-    "<|generated|>, <|quality|>, <|meta|>, <|rating|>"
-)
+
+def _count(node: SampleNode, depth: int = 0, total_childs=None, total_nodes=None):
+    if node.is_leaf:
+        return
+    if depth not in total_childs:
+        total_childs[depth] = 0
+        total_nodes[depth] = 0
+    total_childs[depth] += len(node.childs)
+    total_nodes[depth] += 1
+    for child in node.childs:
+        _count(child, depth + 1, total_childs, total_nodes)
+
+
+def count(node: SampleNode):
+    total_childs = {}
+    total_nodes = {}
+    _count(node, total_childs=total_childs, total_nodes=total_nodes)
+    return total_childs, total_nodes
+
 
 if __name__ == "__main__":
     models.load_model(
@@ -294,7 +353,7 @@ if __name__ == "__main__":
     results = conventional_sample(prompt, 1024)
     gen_per_prompt = [x[1] for x in results]
     print(sum(gen_per_prompt) / len(gen_per_prompt))
-    with open("./test/conventional.txt", "w", encoding="utf-8") as f:
+    with open("./test/beam_search.txt", "w", encoding="utf-8") as f:
         for result, gen in sorted(results):
             result = tipo.parse_tipo_result(result)
             formatted_output = apply_format(result, DEFAULT_FORMAT)

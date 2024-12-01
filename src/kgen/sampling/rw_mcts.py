@@ -7,7 +7,15 @@ import kgen.models as models
 import kgen.executor.tipo as tipo
 from kgen.formatter import seperate_tags, apply_format
 from kgen.generate import generate
-from kgen.sampling import SampleNode, LogitsRecorder, NodeSplitter, get_next, draw_tree
+from kgen.sampling import (
+    SampleNode,
+    LogitsRecorder,
+    NodeSplitter,
+    get_next,
+    draw_tree,
+    count,
+    DEFAULT_FORMAT,
+)
 from kgen.sampling.node_splitters import tag_splitter
 
 
@@ -64,9 +72,16 @@ class MCTSNode(SampleNode):
         return (self.childs + [self])[chosen_idx]
 
     def expand(
-        self, splitters=None, ids_splitters=None, record_simulated_path=False
+        self,
+        splitters=None,
+        ids_splitters=None,
+        record_simulated_path=False,
+        temperature=1.0,
+        top_k=0,
+        top_p=0.0,
+        min_p=0.1,
     ) -> tuple["MCTSNode", int]:
-        print("Expand")
+        # print("Expand")
         splitter = NodeSplitter(
             splitters=splitters,
             ids_splitters=ids_splitters,
@@ -83,6 +98,10 @@ class MCTSNode(SampleNode):
             key_values=self.past_key_values,
             recorder=recorder,
             splitter=splitter,
+            temperature=temperature,
+            top_k=top_k,
+            top_p=top_p,
+            min_p=min_p,
         )
         total_gen = final_len - inp_len
 
@@ -111,6 +130,10 @@ class MCTSNode(SampleNode):
                     key_values=cur.past_key_values,
                     recorder=recorder,
                     splitter=splitter,
+                    temperature=temperature,
+                    top_k=top_k,
+                    top_p=top_p,
+                    min_p=min_p,
                 )
                 total_gen += final_len - inp_len
                 ## this implementation make the simulation path into MCTS tree directly
@@ -134,9 +157,13 @@ class MCTSNode(SampleNode):
                 new_child.prompt,
                 input_ids=new_child.inputs,
                 key_values=new_child.past_key_values,
+                temperature=temperature,
+                top_k=top_k,
+                top_p=top_p,
+                min_p=min_p,
             )
             total_gen += final_len - inp_len
-        print("Simulate end")
+        # print("Simulate end")
 
         new_child.simulated_result = (
             prompt.replace("<s>", "").replace("</s>", "").strip(),
@@ -152,7 +179,7 @@ class MCTSNode(SampleNode):
             node = node.parent
 
 
-def mcts_sample(
+def rw_mcts_sample(
     prompt: str,
     splitters=None,
     ids_splitters=None,
@@ -160,6 +187,10 @@ def mcts_sample(
     exploration=1.0,
     random_walk=False,
     solid_simulate=False,
+    temperature=1.0,
+    top_k=0,
+    top_p=0.0,
+    min_p=0.1,
 ):
     root = MCTSNode(prompt=prompt)
     results = []
@@ -182,50 +213,32 @@ def mcts_sample(
                 depth -= 1
                 break
             node = next
-        print(f"Select depth: {depth}")
+        # print(f"Select depth: {depth}")
 
         # Expansiona + rollout + backpropogation
         new_node, gen = node.expand(
             splitters,
             ids_splitters,
             record_simulated_path=random_walk and solid_simulate,
+            temperature=temperature,
+            top_k=top_k,
+            top_p=top_p,
+            min_p=min_p,
         )
         total_gen += gen
         # If we got a complete generation, add it to results
         if new_node.is_leaf or new_node.simulated_result is not None:
-            print("Add result")
+            # print("Add result")
             results.append(new_node.simulated_result)
 
+        if total_iterations % 100 == 0:
+            print(f"iteration: {total_iterations} - results: {len(results)}")
         total_iterations += 1
 
     print(f"Total iterations: {total_iterations}")
     print(f"Total output tokens: {total_gen}")
     return results, root
 
-
-def _count(node: MCTSNode, depth: int = 0, total_childs=None, total_nodes=None):
-    if node.is_leaf:
-        return
-    if depth not in total_childs:
-        total_childs[depth] = 0
-        total_nodes[depth] = 0
-    total_childs[depth] += len(node.childs)
-    total_nodes[depth] += 1
-    for child in node.childs:
-        _count(child, depth + 1, total_childs, total_nodes)
-
-
-def count(node: MCTSNode):
-    total_childs = {}
-    total_nodes = {}
-    _count(node, total_childs=total_childs, total_nodes=total_nodes)
-    return total_childs, total_nodes
-
-DEFAULT_FORMAT = (
-    "<|special|>, <|characters|>, <|copyrights|>, "
-    "<|artist|>, <|extended|>, <|general|>, "
-    "<|generated|>, <|quality|>, <|meta|>, <|rating|>"
-)
 
 if __name__ == "__main__":
     models.load_model(
@@ -240,17 +253,17 @@ if __name__ == "__main__":
     mode, length, expand = operations[0]
     prompt = tipo.apply_tipo_prompt(meta, general, prompt, mode, length, expand)
 
-    # results, root = mcts_random_walk(prompt, variations=9)
-    results, root = mcts_sample(
+    exploration = 2.0
+    results, root = rw_mcts_sample(
         prompt,
         # splitters=[tag_splitter(tag_count=4)],
         ids_splitters=[lambda ids, i: torch.sum(ids[0, i:] == 29892) >= 4],
         variations=1024,
-        exploration=1.0,
+        exploration=exploration,
         random_walk=True,
         solid_simulate=False,
     )
-    with open("./test/test.txt", "w", encoding="utf-8") as f:
+    with open(f"./test/rw-mcts_exp-{exploration}.txt", "w", encoding="utf-8") as f:
         for result, gen in sorted(results):
             result = tipo.parse_tipo_result(result)
             formatted_output = apply_format(result, DEFAULT_FORMAT)

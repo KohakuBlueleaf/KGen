@@ -3,8 +3,8 @@ from PIL import Image
 from tqdm import tqdm, trange
 
 
-pool = ProcessPoolExecutor(max_workers=24)
-# pool = ThreadPoolExecutor(max_workers=64)
+# pool = ProcessPoolExecutor(max_workers=24)
+pool = ThreadPoolExecutor(max_workers=64)
 
 
 def load(image):
@@ -89,4 +89,3 @@ class TextMetricRunner:
                 )
             )
         return results
-
