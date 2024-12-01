@@ -32,7 +32,9 @@ if __name__ == "__main__":
             exploration=exploration,
             **DEFAULT_SAMPLING_CONFIG,
         )
-        with open(f"./test/cg-mcts_exp-{exploration}.txt", "w", encoding="utf-8") as f:
+        with open(
+            f"./test/cg-mcts-new_exp-{exploration}.txt", "w", encoding="utf-8"
+        ) as f:
             for result, gen in sorted(results):
                 result = tipo.parse_tipo_result(result)
                 formatted_output = apply_format(result, DEFAULT_FORMAT)

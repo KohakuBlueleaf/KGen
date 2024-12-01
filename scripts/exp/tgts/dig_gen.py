@@ -25,6 +25,8 @@ async def main():
     tasks = []
     prompt_files = os.listdir("./test")
     for prompt_file in prompt_files:
+        if "cg-mcts-new" not in prompt_file:
+            continue
         category = os.path.basename(prompt_file).split(".")[0]
         propmts = load_propmts(f"./test/{prompt_file}")
         for idx, prompt in propmts:

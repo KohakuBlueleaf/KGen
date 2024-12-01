@@ -3,7 +3,9 @@ import kgen.executor.tipo as tipo
 from kgen.formatter import seperate_tags, apply_format
 from kgen.sampling import DEFAULT_FORMAT, DEFAULT_SAMPLING_CONFIG
 from kgen.sampling.beam import (
-    beam_search_sample, diverse_beam_search, stochastic_beam_search
+    beam_search_sample,
+    diverse_beam_search,
+    stochastic_beam_search,
 )
 
 
@@ -20,10 +22,7 @@ if __name__ == "__main__":
     mode, length, expand = operations[0]
     prompt = tipo.apply_tipo_prompt(meta, general, prompt, mode, length, expand)
 
-    results =  beam_search_sample(
-        prompt,
-        num_sequences=1024
-    )
+    results = beam_search_sample(prompt, 1024)
     gen_per_prompt = [x[1] for x in results]
     print(sum(gen_per_prompt) / len(gen_per_prompt))
     with open("./test/beam_search.txt", "w", encoding="utf-8") as f:
@@ -32,10 +31,7 @@ if __name__ == "__main__":
             formatted_output = apply_format(result, DEFAULT_FORMAT)
             f.write(formatted_output + "\n")
 
-    results =  stochastic_beam_search(
-        prompt,
-        num_sequences=1024
-    )
+    results = stochastic_beam_search(prompt, 1024)
     gen_per_prompt = [x[1] for x in results]
     print(sum(gen_per_prompt) / len(gen_per_prompt))
     with open("./test/stochastic_beam_search.txt", "w", encoding="utf-8") as f:
