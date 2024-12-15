@@ -438,7 +438,7 @@ def tipo_runner_generator(
             length,
             expand,
             gen_meta and is_last,
-            seed=kwargs.pop("seed", 0) or random.randint(0, 2**32),
+            seed=kwargs.get("seed", 0) or random.randint(0, 2**32),
             total_timing=total_timing,
             **kwargs,
         ):
@@ -456,6 +456,9 @@ def tipo_runner_generator(
 
 
 def tipo_runner(meta, operations, general, nl_prompt, gen_meta=False, **kwargs):
+    seed = kwargs.get("seed", 0) or random.randint(0, 2**32)
+    kwargs["seed"] = seed
+    random.seed(seed)
     for parsed, timing in tipo_runner_generator(
         meta, operations, general, nl_prompt, gen_meta, **kwargs
     ):
