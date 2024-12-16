@@ -419,7 +419,7 @@ def generate_with_retry(
 
 
 def tipo_runner_generator(
-    meta, operations, general, nl_prompt, gen_meta=False, **kwargs
+    meta, operations, general, nl_prompt, gen_meta=False, seed=0, **kwargs
 ):
     total_timing = {}
     for idx, (mode, length, expand) in enumerate(operations):
@@ -438,7 +438,7 @@ def tipo_runner_generator(
             length,
             expand,
             gen_meta and is_last,
-            seed=kwargs.get("seed", 0) or random.randint(0, 2**32),
+            seed=seed or random.randint(0, 2**32),
             total_timing=total_timing,
             **kwargs,
         ):
@@ -455,9 +455,8 @@ def tipo_runner_generator(
     yield parsed, total_timing
 
 
-def tipo_runner(meta, operations, general, nl_prompt, gen_meta=False, **kwargs):
-    seed = kwargs.get("seed", 0) or random.randint(0, 2**32)
-    kwargs["seed"] = seed
+def tipo_runner(meta, operations, general, nl_prompt, gen_meta=False, seed=0, **kwargs):
+    seed = seed or random.randint(0, 2**32)
     random.seed(seed)
     for parsed, timing in tipo_runner_generator(
         meta, operations, general, nl_prompt, gen_meta, **kwargs
