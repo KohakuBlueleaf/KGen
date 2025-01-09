@@ -43,7 +43,7 @@ t5_tokenizer = AutoTokenizer.from_pretrained("EleutherAI/pile-t5-large")
 
 # models.load_model("Amber-River/tipo", device="cuda", subfolder="500M-epoch3")
 models.load_model(
-    "TIPO-500M_epoch5-F16.gguf",
+    "TIPO-200M-ft2_TIPO-200M-ft2-F16.gguf",
     gguf=True,
     device="cuda",
     main_gpu=0,
