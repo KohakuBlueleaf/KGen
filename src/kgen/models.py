@@ -36,6 +36,7 @@ model_have_quality_info = {
 }
 
 tipo_model_list = [
+    ("KBlueLeaf/TIPO-500M-ft", ["TIPO-500M-ft-F16.gguf"]),
     ("KBlueLeaf/TIPO-200M-ft2", ["TIPO-200M-ft2-F16.gguf"]),
     ("KBlueLeaf/TIPO-200M-ft", ["TIPO-200M-ft-F16.gguf"]),
     ("KBlueLeaf/TIPO-500M", ["TIPO-500M_epoch5-F16.gguf"]),
