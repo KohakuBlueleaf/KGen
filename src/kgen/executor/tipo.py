@@ -249,7 +249,7 @@ def tag_filter(tag):
     return True
 
 
-def post_generate_process(parsed, meta, general, nl_prompt, mode, length, expand):
+def post_generate_process(parsed, general, nl_prompt, mode, length):
     if mode is None:
         parsed.pop("extended", None)
         parsed.pop("generated", None)
@@ -263,18 +263,19 @@ def post_generate_process(parsed, meta, general, nl_prompt, mode, length, expand
     input_tags = [tag.strip() for tag in general.split(",")]
     input_prompts = [tag.strip() for tag in nl_prompt.split(".") if tag.strip()]
 
+    # 모든 키에 대해 tag_filter 적용
+    for key, value in list(parsed.items()):
+        if isinstance(value, list):
+            parsed[key] = [tag for tag in value if tag_filter(tag)]
+
     input_generals = [tag for tag in parsed.get("general", []) if tag in input_tags]
     output_generals = shuffle_iterable(
-        [
-            tag
-            for tag in parsed.get("general", [])
-            if tag_filter(tag) and tag not in input_tags
-        ]
+        [tag for tag in parsed.get("general", []) if tag not in input_tags]
     )
     output_nl_prompts = [
         tag.strip()
         for tag in parsed.get("extended", "").split(".")
-        if tag_filter(tag.strip()) and tag.strip() not in input_prompts and tag.strip()
+        if tag.strip() and tag.strip() not in input_prompts
     ]
     if output_nl_prompts and input_prompts[-1] in output_nl_prompts[0]:
         input_prompts[-1] = output_nl_prompts.pop(0)
@@ -296,9 +297,7 @@ def post_generate_process(parsed, meta, general, nl_prompt, mode, length, expand
         generated_nl = [
             tag.strip()
             for tag in parsed.get("generated", "").split(".")
-            if tag_filter(tag.strip())
-            and tag.strip() not in input_prompts
-            and tag.strip()
+            if tag.strip() and tag.strip() not in input_prompts
         ]
         if len(generated_nl) > max_length_nl:
             generated_nl = generated_nl[:max_length_nl]
@@ -388,9 +387,7 @@ def generate_with_retry(
             for key in timing:
                 total_timing[key] = total_timing.get(key, 0) + timing[key]
         parsed = parse_tipo_result(result)
-        parsed = post_generate_process(
-            parsed, meta, general, nl_prompt, mode, length, expand
-        )
+        parsed = post_generate_process(parsed, general, nl_prompt, mode, length)
         yield result, parsed
         if target == "long" and "generated" not in parsed:
             target = "short"
