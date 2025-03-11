@@ -30,11 +30,11 @@ Experiment scripts can be found in [scrtips](scripts/exp/tgts/)
 
 TIPO: Text to Image with text Presampling for Optimal prompting
 
-Arxiv Paper: https://arxiv.org/abs/2411.08127
-Training Code: https://github.com/KohakuBlueleaf/UwULLM
+Arxiv Paper: https://arxiv.org/abs/2411.08127 <br>
+Training Code: https://github.com/KohakuBlueleaf/UwULLM <br>
 ComfyUI/SD-WebUI extension: https://github.com/KohakuBlueleaf/z-tipo-extension
 
-TIPO is a LLM model system designed for generating detailed prompt from input tags or caption. Unlike DTG, TIPO can handle both tags and Natural language. In theory, you can also design your own tag in linguistic way. (For example, long blue hair is acceptable tag in TIPO and will not break the model).
+TIPO is a LLM model system designed for generating detailed prompt from input tags or caption. Unlike DTG, TIPO can handle both tags and Natural language. In theory, you can also design your own tag in linguistic way. (For example, long blue hair is acceptable tag in TIPO and will not break the model). <br>
 The main difference between TIPO and DTG is:
 
 1. TIPO is trained with both Natural Language captions and Danbooru tags, the "nl+tags" data are also not only from danbooru but also some general text-image dataset like Coyo-11M
