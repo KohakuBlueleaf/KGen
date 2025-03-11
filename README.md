@@ -31,6 +31,8 @@ Experiment scripts can be found in [scrtips](scripts/exp/tgts/)
 TIPO: Text to Image with text Presampling for Optimal prompting
 
 Arxiv Paper: https://arxiv.org/abs/2411.08127
+Training Code: https://github.com/KohakuBlueleaf/UwULLM
+ComfyUI/SD-WebUI extension: https://github.com/KohakuBlueleaf/z-tipo-extension
 
 TIPO is a LLM model system designed for generating detailed prompt from input tags or caption. Unlike DTG, TIPO can handle both tags and Natural language. In theory, you can also design your own tag in linguistic way. (For example, long blue hair is acceptable tag in TIPO and will not break the model).
 The main difference between TIPO and DTG is:
@@ -52,8 +54,8 @@ The main difference between TIPO and DTG is:
 | Training Time     | 420 hour`                                                                      | 120 hour`                                                                            | 100 hour`                                                                      |
 | Huggingface       | [KBlueLeaf/TIPO-200M · Hugging Face](https://huggingface.co/KBlueLeaf/TIPO-200M) | [KBlueLeaf/TIPO-200M-ft · Hugging Face](https://huggingface.co/KBlueLeaf/TIPO-200M-ft) | [KBlueLeaf/TIPO-500M · Hugging Face](https://huggingface.co/KBlueLeaf/TIPO-500M) |
 
-*: We only count "non-padding token" in the token seen, since all the training data have very large length range.`<br/>`
-`: Since the training data is pretty short, it cost more time to reach same token seen than general LLM pretraining.<br/>````
+*: We only count "non-padding token" in the token seen, since all the training data have very large length range.<br/>
+`: Since the training data is pretty short, it cost more time to reach same token seen than general LLM pretraining. <br/>
 As reference, with 4096 as max ctx length and almost all the data have reach that length, you may only need 2days to reach 10B token seen on RTX 3090 x 4 with 200M model.
 
 ### Usage
