@@ -72,15 +72,15 @@ def remove_repeated_suffix(text):
 
 if __name__ == "__main__":
     models.load_model(
-        "TIPO-200M-40Btok-F16.gguf",
+        "TIPO-500M-ft_TIPO-500M-ft-F16.gguf",
         gguf=True,
         device="cuda",
-        main_gpu=1,
+        main_gpu=0,
     )
-    with open("./danbooru.json", "r") as f:
+    with open("./data/danbooru.json", "r", encoding="utf-8") as f:
         data = loads(f.read())
-    with open("./danbooru-output.jsonl", "ab") as f:
-        for entry in tqdm.tqdm(data[1485 + 6543 : 10000], smoothing=0.01):
+    with open("./data/danbooru-output-500m.jsonl", "ab") as f:
+        for entry in tqdm.tqdm(data[156:1000], smoothing=0.01):
             short_caption = remove_repeated_suffix(entry["florence_short"])
             long_caption = remove_repeated_suffix(
                 entry.get("phi3v_horny", None) or entry["florence_long"]

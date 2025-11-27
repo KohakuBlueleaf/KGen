@@ -42,5 +42,5 @@ for cate in images.keys():
     simmat = images_simmat[cate]
     index = np.argsort(np.min(simmat, axis=1), axis=0)
     img = [img[i] for i in index]
-    grid = create_image_grid([Image.open(i) for i in img[30: 30+9]])
+    grid = create_image_grid([Image.open(i) for i in img[30 : 30 + 9]])
     grid.save(f"./output/tgts-grid/{cate}.jpg", quality=100)

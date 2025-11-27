@@ -68,15 +68,15 @@ def remove_repeated_suffix(text):
 
 if __name__ == "__main__":
     models.load_model(
-        "TIPO-200M-40Btok-F16.gguf",
+        "TIPO-500M-ft_TIPO-500M-ft-F16.gguf",
         gguf=True,
         device="cuda",
-        main_gpu=2,
+        main_gpu=0,
     )
-    with open("./coyo.json", "r") as f:
+    with open("./data/coyo.json", "r", encoding="utf-8") as f:
         data = loads(f.read())
-    with open("./coyo-output.jsonl", "ab") as f:
-        for entry in tqdm.tqdm(data[:10000], smoothing=0.01):
+    with open("./data/coyo-output-tipo500m.jsonl", "ab") as f:
+        for entry in tqdm.tqdm(data[345:1000], smoothing=0.01):
             entry.pop("url", None)
             short_caption = remove_repeated_suffix(entry["caption_llava_short"].strip())
             detail_caption = remove_repeated_suffix(entry["caption_llava"].strip())

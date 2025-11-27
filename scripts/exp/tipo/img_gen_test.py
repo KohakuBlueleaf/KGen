@@ -58,4 +58,4 @@ if __name__ == "__main__":
                 1216,
                 5,
             )
-            images[0].save(f"./output/kxl-test-{pad=}-{eos=}.png")
+            images[0].save(f"./output/dan-img-500m/kxl-test-{pad=}-{eos=}.png")

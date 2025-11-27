@@ -14,6 +14,7 @@ from PIL import Image
 from tqdm import trange, tqdm
 
 from .base import MetricRunner
+from .vendi_impl import score_K_torch
 
 
 def load_img(file, size):
@@ -68,7 +69,7 @@ class VendiRunner(MetricRunner):
     def eval(self, images, ref_texts=None, is_ref=False):
         images = torch.stack(images).cuda()
         features = self.feature_extractor(images)
-        self.features.append(features.cpu())
+        self.features.append(features)
 
     @torch.no_grad()
     def eval_multi(self, images, ref_texts=None, ref_images=None, batch_size=32):
@@ -83,8 +84,10 @@ class VendiRunner(MetricRunner):
             similarities[similarities != 1].mean(),
             similarities[similarities != 1].std(),
         )
-        result = vendi.score_K(similarities.cpu().numpy(), q=1, normalize=True)
-        return result, similarities.cpu().numpy()
+        torch.cuda.empty_cache()
+        result = score_K_torch(similarities.float(), q=1, normalize=True)
+        # result = vendi.score_K(similarities.cpu().numpy(), q=1, normalize=True)
+        return result.cpu().numpy(), similarities.cpu().numpy()
 
 
 if __name__ == "__main__":

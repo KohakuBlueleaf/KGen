@@ -5,6 +5,7 @@ from PIL import Image
 
 import numpy as np
 import torch
+from tqdm import tqdm, trange
 from diffusers import (
     StableDiffusionXLKDiffusionPipeline,
     UNet2DConditionModel,
@@ -12,7 +13,12 @@ from diffusers import (
 )
 from k_diffusion.external import CompVisDenoiser
 from k_diffusion.sampling import get_sigmas_polyexponential
-from k_diffusion.sampling import sample_dpmpp_2m_sde
+from k_diffusion.sampling import (
+    sample_dpmpp_2m_sde,
+    sample_euler,
+    sample_euler_ancestral,
+    sample_heun,
+)
 
 torch.set_float32_matmul_precision("medium")
 
@@ -87,6 +93,15 @@ def load_model(model_id="KBlueLeaf/Kohaku-XL-Zeta", device="cuda", custom_vae=Fa
     # )
     pipe.sampler = partial(sample_dpmpp_2m_sde, eta=0.35, solver_type="heun")
     pipe.k_diffusion_model.forward = model_forward(pipe.k_diffusion_model)
+
+    pipe.vae = torch.compile(pipe.vae, mode="default")
+    pipe.text_encoder = torch.compile(pipe.text_encoder, mode="default")
+    pipe.text_encoder_2 = torch.compile(pipe.text_encoder_2, mode="default")
+    pipe.k_diffusion_model.inner_model.model = torch.compile(
+        pipe.k_diffusion_model.inner_model.model, mode="default"
+    )
+
+    torch.cuda.empty_cache()
     return pipe
 
 
@@ -217,6 +232,63 @@ def vae_image_postprocess(image_tensor: torch.Tensor) -> Image.Image:
     return image
 
 
+class DDIMInversionCallback:
+    """
+    Automatic DDIMInversionCallback
+    for Z-Sampling
+    it will inverse back to previous sigma than sampling back to current sigma
+    """
+
+    def __init__(self, model, sigmas: list, inverse_cfg: float, extra_args=None):
+        self.model = model
+        self.sigmas = sigmas
+        self.inverse_cfg = inverse_cfg
+        self.extra_args = {} if extra_args is None else extra_args
+
+    def __call__(self, infos):
+        xt = infos["x"]
+        denoised = infos["denoised"]
+        sigma = infos["sigma"]
+        current_sigma_index = self.sigmas.index(sigma)
+        if current_sigma_index in {0, len(self.sigmas) - 1}:
+            return
+
+        noise = (xt - denoised) / sigma
+        x_inverse = denoised + self.sigmas[current_sigma_index - 1] * noise
+        new_denoised = self.model(
+            x_inverse,
+            self.sigmas[current_sigma_index - 1],
+            cfg_override=self.inverse_cfg,
+            **self.extra_args,
+        )
+
+
+@torch.no_grad()
+def sample_ddim(
+    model,
+    x,
+    sigmas,
+    extra_args=None,
+    callback=None,
+    disable=None,
+    s_churn=0.0,
+    s_tmin=0.0,
+    s_tmax=float("inf"),
+    s_noise=1.0,
+):
+    """Implements Algorithm 2 (Euler steps) from Karras et al. (2022)."""
+    extra_args = {} if extra_args is None else extra_args
+    s_in = x.new_ones([x.shape[0]])
+    for i in trange(len(sigmas) - 1, disable=disable):
+        denoised = model(x, s_in * sigmas[i], **extra_args)
+        noise = (x - denoised) / sigmas[i]
+        if callback is not None:
+            callback({"x": x, "i": i, "sigma": sigmas[i], "denoised": denoised})
+        # go back to xt
+        x = denoised + sigmas[i + 1] * noise
+    return x
+
+
 @torch.no_grad()
 def generate(
     pipe: StableDiffusionXLKDiffusionPipeline,
@@ -228,6 +300,7 @@ def generate(
     width=1024,
     height=1024,
     guidance_scale=6.0,
+    z_sample=False,
 ):
     pipe.scheduler.set_timesteps(num_inference_steps)
     unet: CompVisDenoiser = pipe.k_diffusion_model
@@ -246,14 +319,21 @@ def generate(
         }
         text_ctx = torch.cat([prompt_embeds, negative_prompt_embeds])
 
-        def cfg_wrapper(x, sigma):
+        def cfg_wrapper(x, sigma, cfg_override=None):
             cond, uncond = unet(
                 torch.cat([x] * 2),
                 torch.cat([sigma] * 2),
                 cond=text_ctx,
                 added_cond_kwargs=added_cond,
             ).chunk(2)
-            cfg_output = uncond + guidance_scale * (cond - uncond)
+            if cfg_override is not None:
+                if isinstance(cfg_override, list):
+                    cfg = cfg_override.pop(0)
+                else:
+                    cfg = float(cfg_override)
+            else:
+                cfg = guidance_scale
+            cfg_output = uncond + cfg * (cond - uncond)
             return cfg_output
 
     else:
@@ -264,15 +344,23 @@ def generate(
             "text_embeds": negative_pooled_prompt_embeds,
         }
 
-        def cfg_wrapper(x, sigma):
+        def cfg_wrapper(x, sigma, cfg_override=None):
             cond = unet(x, sigma, cond=prompt_embeds, added_cond_kwargs=added_cond_pos)
             uncond = unet(
                 x, sigma, cond=negative_prompt_embeds, added_cond_kwargs=added_cond_neg
             )
-            cfg_output = uncond + guidance_scale * (cond - uncond)
+            if cfg_override is not None:
+                if isinstance(cfg_override, list):
+                    cfg = cfg_override.pop(0)
+                else:
+                    cfg = float(cfg_override)
+            else:
+                cfg = guidance_scale
+            cfg_output = uncond + cfg * (cond - uncond)
             return cfg_output
 
-    sigmas = pipe.scheduler.sigmas
+    sigmas = list(pipe.scheduler.sigmas)
+    cfg_lists = [guidance_scale] * len(sigmas)
     x0 = (
         torch.randn(
             (1, 4, height // 8, width // 8),
@@ -281,8 +369,36 @@ def generate(
         .repeat(prompt_embeds.size(0), 1, 1, 1)
         * sigmas[0]
     )
-    result = sample_dpmpp_2m_sde(
-        cfg_wrapper, x0, sigmas.to(prompt_embeds.device), eta=1.0
+
+    # 5, 4, 3, 2, 1, 0
+    # 5, 4, *5*, 3, *4*, 2, *3*, 1, 0
+    # 5, 4, *5*, **4**, 3, *4*, **3**, 2, *3*, **2**, 1, 0
+    # sigmas[:1] + interleave(sigmas[1:], sigmas[:-1]) + sigmas[-1:]
+    def interleave(*lists):
+        return sum((list(x) for x in zip(*lists)), [])
+
+    if z_sample:
+        sigmas = (
+            sigmas[:2]
+            + interleave(sigmas[:-3], sigmas[1:-2], sigmas[2:-1])
+            + sigmas[-2:]
+        )
+        cfg_lists = (
+            cfg_lists[:1]
+            + interleave(
+                [max(guidance_scale * 0.2, 1.5) for _ in cfg_lists[:-3]],
+                cfg_lists[:-3],
+                cfg_lists[:-3],
+            )
+            + cfg_lists[-3:]
+        )
+    sigmas = torch.tensor(sigmas)
+
+    result = sample_euler(
+        cfg_wrapper,
+        x0,
+        sigmas.to(prompt_embeds.device),
+        extra_args={"cfg_override": cfg_lists},
     )
     result /= pipe.vae.config.scaling_factor
     image_tensors = []
@@ -296,36 +412,73 @@ def generate(
 
 
 if __name__ == "__main__":
+    from lightning.pytorch import seed_everything
+
     prompt = """
 1girl,
 king halo (umamusume), umamusume,
 
-ogipote, misu kasumi, fuzichoco, ningen mame, ask (askzy), maccha (mochancc),
+fujisaki hikari, ninjin nouka, quasarcake, welchino, hazuki natsu, sho (sho lwlw), 
+yuzuki gao, naga u, usashiro mani, azumi kazuki, 
+masterpiece, newest, best quality, absurdres, safe,
 
 solo, leaning forward, cleavage, sky, outdoors, black bikini, stomach, swimsuit, navel, 
+collarbone, beach, brown eyes, horse ears, cloud, cloudy sky, medium breasts, water, 
+bikini under clothes, horizon, bikini, long sleeves, day, looking at viewer, breasts, 
+animal ears, jacket, ear covers, horse girl, smile, brown hair, blue sky, open mouth, 
+green skirt, frills, skirt, ocean, 
 
 masterpiece, newest, absurdres, sensitive
 """.strip()
-    # sdxl_pipe = load_model("KBlueLeaf/xxx")
+
+    neg_prompt = """
+low quality, worst quality, text, signature, jpeg artifacts, bad anatomy, 
+old, early, copyright name, watermark, artist name, signature
+"""
+
+    steps = 32
     sdxl_pipe = load_model()
-    t0 = time()
-    for _ in range(10):
-        with torch.autocast("cuda"):
-            (prompt_embeds, neg_prompt_embeds), (pooled_embeds2, neg_pooled_embeds2) = (
-                encode_prompts(sdxl_pipe, [prompt] * 3, "")
-            )
-            result = generate(
-                sdxl_pipe,
-                prompt_embeds,
-                neg_prompt_embeds,
-                pooled_embeds2,
-                neg_pooled_embeds2,
-                num_inference_steps=24,
-                width=1024,
-                height=1024,
-                guidance_scale=6.0,
-            )[0]
-    t1 = time()
-    print((t1 - t0) / 100)
+    (prompt_embeds, neg_prompt_embeds), (pooled_embeds2, neg_pooled_embeds2) = (
+        encode_prompts(
+            sdxl_pipe,
+            [prompt] * 3,
+            [neg_prompt] * 3,
+            padding_to_max_length=True,
+            take_all_eos=True,
+        )
+    )
+
+    seed = torch.randint(0, 2**31 - 1, []).item()
+    print(seed)
+
+    with torch.autocast("cuda"):
+        seed_everything(seed)
+        result = generate(
+            sdxl_pipe,
+            prompt_embeds,
+            neg_prompt_embeds,
+            pooled_embeds2,
+            neg_pooled_embeds2,
+            num_inference_steps=steps,
+            width=1024,
+            height=1024,
+            guidance_scale=7.0,
+        )[0]
 
     result.save("output/test.png")
+    with torch.autocast("cuda"):
+        seed_everything(seed)
+        result = generate(
+            sdxl_pipe,
+            prompt_embeds,
+            neg_prompt_embeds,
+            pooled_embeds2,
+            neg_pooled_embeds2,
+            num_inference_steps=(steps - 3) // 3 + 2 + bool(steps % 3),
+            width=1024,
+            height=1024,
+            guidance_scale=7.0,
+            z_sample=True,
+        )[0]
+
+    result.save("output/test-z.png")

@@ -3,11 +3,10 @@ from PIL import Image
 from tqdm import tqdm, trange
 
 
-# pool = ProcessPoolExecutor(max_workers=24)
 pool = ThreadPoolExecutor(max_workers=64)
 
 
-def load(image):
+def load(self, image):
     if isinstance(image, str):
         return Image.open(image).convert("RGB")
     else:

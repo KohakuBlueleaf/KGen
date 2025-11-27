@@ -16,7 +16,7 @@ class AestheticRunner(MetricRunner):
         model, preprocessor = convert_v2_5_from_siglip(
             low_cpu_mem_usage=False,
             trust_remote_code=True,
-            attn_implementation="flash_attention_2",
+            attn_implementation="sdpa",
             torch_dtype=torch.float32,
         )
         model = model.cuda().requires_grad_(False)

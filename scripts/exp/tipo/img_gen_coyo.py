@@ -31,6 +31,7 @@ def load_prompts(file):
 
 def generate_entry(entry, sdxl_pipe):
     index, *prompts = entry
+    prompts = list(prompts)[2:]
     (prompt_embeds, neg_prompt_embeds), (pooled_embeds2, neg_pooled_embeds2) = (
         encode_prompts(sdxl_pipe, prompts, "")
     )
@@ -45,15 +46,17 @@ def generate_entry(entry, sdxl_pipe):
         height=1024,
         guidance_scale=3.0,
     )
-    return list(zip(result, ["short", "truncate_long", "tipo_gen", "tipo_extend"]))
+    return list(zip(result, ["short", "truncate_long", "tipo_gen", "tipo_extend"][2:]))
 
 
 if __name__ == "__main__":
-    pipe = load_model("stabilityai/stable-diffusion-xl-base-1.0", "cuda:1")
-    datas = load_prompts("./data/coyo-output.jsonl")
+    pipe = load_model(
+        "stabilityai/stable-diffusion-xl-base-1.0", "cuda:0", custom_vae=True
+    )
+    datas = load_prompts("./data/coyo-output-tipo500m.jsonl")
 
     for entry in tqdm(datas):
         index = entry[0]
         result = generate_entry(entry, pipe)
         for i, (img, prompt) in enumerate(result):
-            img.save(f"./output/coyo-img/{index}_{prompt}.png")
+            img.save(f"./output/short-long-gen-extend-500m/{index}_{prompt}.png")

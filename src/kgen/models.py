@@ -104,7 +104,7 @@ def load_model(
             assert Llama is not None
             text_model = Llama(
                 str(model_dir / model_name),
-                n_ctx=1024,
+                n_ctx=2048,
                 n_gpu_layers=0 if device == "cpu" else 1000,
                 verbose=False,
                 **kwargs,
