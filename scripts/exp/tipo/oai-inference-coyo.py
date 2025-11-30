@@ -44,7 +44,7 @@ async def main(data):
             ".".join(entry[LONG_KEY].strip().split(".")[:2])
         )
         tasks.append(task(entry, short_caption, detail_caption))
-    with aiofiles.open("./data/gbc-output-oai.jsonl", "ab") as f:
+    async with aiofiles.open("./data/gbc-output-oai.jsonl", "ab") as f:
         for result in await tqdm_asyncio.gather(*tasks, smoothing=0.01):
             await f.write(dumps(result) + b"\n")
 
