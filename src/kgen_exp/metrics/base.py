@@ -6,7 +6,7 @@ from tqdm import tqdm, trange
 pool = ThreadPoolExecutor(max_workers=64)
 
 
-def load(self, image):
+def load(image):
     if isinstance(image, str):
         return Image.open(image).convert("RGB")
     else:
@@ -20,7 +20,9 @@ def batch_load(images, loading_func=load):
 class MetricRunner:
     single = False
     multi = False
-    img_load_func = load
+
+    def img_load_func(self, image):
+        return load(image)
 
     def eval(self, images, ref_texts=None, is_ref=False):
         raise NotImplementedError()
