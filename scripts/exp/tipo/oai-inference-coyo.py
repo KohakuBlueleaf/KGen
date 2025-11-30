@@ -1,4 +1,5 @@
 import asyncio
+import aiofiles
 import torch
 import tqdm
 from tqdm.asyncio import tqdm_asyncio
@@ -34,10 +35,7 @@ async def task(entry, short, detail):
     return generated_entry
 
 
-async def main():
-    with open("./data/gbc.json", "rb") as f:
-        data = loads(f.read())
-
+async def main(data):
     tasks = []
     for entry in tqdm.tqdm(data[:10000], smoothing=0.001):
         entry.pop("url", None)
@@ -46,10 +44,12 @@ async def main():
             ".".join(entry[LONG_KEY].strip().split(".")[:2])
         )
         tasks.append(task(entry, short_caption, detail_caption))
-    with open("./data/gbc-output-oai.jsonl", "ab") as f:
+    with aiofiles.open("./data/gbc-output-oai.jsonl", "ab") as f:
         for result in await tqdm_asyncio.gather(*tasks, smoothing=0.01):
-            f.write(dumps(result) + b"\n")
+            await f.write(dumps(result) + b"\n")
 
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    with open("./data/gbc.json", "rb") as f:
+        data = loads(f.read())
+    asyncio.run(main(data))

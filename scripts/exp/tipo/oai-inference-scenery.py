@@ -1,4 +1,5 @@
 import asyncio
+import aiofiles
 import torch
 import tqdm
 from tqdm.asyncio import tqdm_asyncio
@@ -64,17 +65,17 @@ async def task(entry):
     return generated_entry
 
 
-async def main():
-    with open("./data/scenery-output.jsonl", "rb") as f:
-        data = [loads(line) for line in f.readlines()]
-
+async def main(data):
     tasks = []
     for entry in tqdm.tqdm(data[:32768], smoothing=0.001):
         tasks.append(task(entry["entry"]))
-    with open("./data/scenery-output-oai.jsonl", "ab") as f:
+    async with aiofiles.open("./data/scenery-output-oai.jsonl", "ab") as f:
         for result in await tqdm_asyncio.gather(*tasks, smoothing=0.01):
-            f.write(dumps(result) + b"\n")
+            await f.write(dumps(result) + b"\n")
 
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    with open("./data/scenery-output.jsonl", "rb") as f:
+        data = [loads(line) for line in f.readlines()]
+
+    asyncio.run(main(data))
