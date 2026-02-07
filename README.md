@@ -1,5 +1,7 @@
 # KGen - A System for Prompt Generation to Improve Text-to-Image Performance
 
+***TIPO (ICLR 2026)***: https://openreview.net/forum?id=dDnw3Pp70x
+
 KGen is a project that utilizes Large Language Models (LLMs) to generate prompts for Text-to-Image (T2I) models.
 
 The goal is to enable T2I models to use more complicated and detailed captions during training while maintaining good usability. Which avoid the requirements of multi-level caption or caption dropout for "better flexibility".
